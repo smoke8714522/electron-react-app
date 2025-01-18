@@ -1,83 +1,50 @@
 {
-  "name": "erwt",
-  "productName": "ERWT",
-  "version": "8.1.0",
-  "description": "Robust project for developing Desktop Application with Electron, React, Webpack & TypeScript.",
-  "main": ".webpack/main",
+  "name": "app_name",
+  "version": "1.0.0",
+  "description": "An Electron application with Vue and TypeScript",
+  "main": "./out/main/main.js",
+  "author": "author_name",
+  "homepage": "https://electron-vite.org",
   "scripts": {
-    "start": "cross-env NODE_ENV=development electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make",
-    "publish": "electron-forge publish",
-    "lint": "eslint src/ --ext .ts,.js,.tsx,.jsx"
-  },
-  "keywords": [
-    "electron boilerplate",
-    "minimal",
-    "electron-webpack",
-    "electron-react",
-    "electron-typescript",
-    "hmr",
-    "boilerplate",
-    "2024",
-    "ERWT"
-  ],
-  "author": {
-    "name": "codesbiome",
-    "url": "https://github.com/codesbiome"
-  },
-  "contributors": [
-    {
-      "name": "guasam",
-      "url": "https://github.com/guasam"
-    }
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/codesbiome/electron-react-webpack-typescript-2024"
-  },
-  "license": "MIT",
-  "config": {
-    "forge": "./tools/forge/forge.config.js"
-  },
-  "devDependencies": {
-    "@electron-forge/cli": "7.4.0",
-    "@electron-forge/maker-deb": "7.4.0",
-    "@electron-forge/maker-rpm": "7.4.0",
-    "@electron-forge/maker-squirrel": "7.4.0",
-    "@electron-forge/maker-zip": "7.4.0",
-    "@electron-forge/plugin-webpack": "7.4.0",
-    "@marshallofsound/webpack-asset-relocator-loader": "^0.5.0",
-    "@pmmmwh/react-refresh-webpack-plugin": "^0.5.15",
-    "@types/node": "^20.14.11",
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "@types/webpack-env": "^1.18.5",
-    "@typescript-eslint/eslint-plugin": "^7.16.1",
-    "@typescript-eslint/parser": "^7.16.1",
-    "@vercel/webpack-asset-relocator-loader": "1.7.3",
-    "classnames": "^2.5.1",
-    "cross-env": "^7.0.3",
-    "css-loader": "^7.1.2",
-    "electron": "^31.2.1",
-    "eslint": "^9.7.0",
-    "eslint-import-resolver-alias": "^1.1.2",
-    "eslint-plugin-import": "^2.29.1",
-    "eslint-plugin-react": "^7.34.4",
-    "file-loader": "^6.2.0",
-    "fork-ts-checker-webpack-plugin": "^9.0.2",
-    "node-loader": "^2.0.0",
-    "react-refresh": "^0.14.2",
-    "sass": "^1.77.8",
-    "sass-loader": "^14.2.1",
-    "style-loader": "^4.0.0",
-    "ts-loader": "9.5.1",
-    "typescript": "^5.5.3",
-    "webpack": "^5.93.0"
+    "format": "prettier --write .",
+    "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts,.vue --fix",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "start": "electron-vite preview",
+    "dev": "electron-vite dev -w",
+    "build": "npm run typecheck && electron-vite build",
+    "postinstall": "electron-builder install-app-deps",
+    "build:unpack": "npm run build && electron-builder --dir",
+    "build:win": "npm run build && electron-builder --win",
+    "build:mac": "npm run build && electron-builder --mac",
+    "build:linux": "npm run build && electron-builder --linux",
+    "build:win:bun": "electron-vite build && electron-builder --win"
   },
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.1",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^3.0.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/eslint-config": "^1.0.2",
+    "@electron-toolkit/eslint-config-ts": "^2.0.0",
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@rushstack/eslint-patch": "^1.10.5",
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.4",
+    "@types/react-dom": "^19.0.2",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vue/eslint-config-prettier": "^10.1.0",
+    "@vue/eslint-config-typescript": "^14.2.0",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react": "^7.37.3",
+    "prettier": "^3.4.2",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
   }
 }
