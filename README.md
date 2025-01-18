@@ -1,73 +1,62 @@
-# Electron React Webpack Typescript (Custom Titlebar)
+# Electron React Webpack Typescript - ERWT
 
-A prebuilt project for creating desktop apps using Electron, React, Webpack & Typescript with hot-reload, easy to use custom import aliases & executable builds for distribution.
+A ready-to-go setup for building desktop apps with Electron, React, Webpack, and TypeScript. It’s got hot-reload, custom import aliases, and makes it easy to create executable builds for sharing.
 
 <br>
 <img src="assets/images/anim_v8.gif" />
 <br>
 
-Special thanks to [@guasam](https://github.com/guasam) for development of Custom Window, Titlebar, UI/UX etc.
-
-<br>
-
 ## Core Features
 
-- 🌟 Electron
-- 🌀 TypeScript
-- ⚛️ React
-- 🥗 SASS/SCSS Loader
-- 🎨 CSS Loader
-- 📸 Image Loader
-- 🆎 Font Loader
-- 🧹 ESLint
-- 📦 Electron Forge
-- 📐 Custom Window Frame
-- 📐 Custom Window Titlebar
-- 📐 Custom Window Menubar
-- 🔱 Webpack & Configuration
-- 🧩 Aliases for Project Paths
-- 🗡️ Native (node) Modules Support
-- 🔥 React Fast Refresh + Webpack HMR
-- 🌞 Dark Mode + Light Mode (Theme)
-- 🎁 Package Bundling (Distribution / Release)
+- 🌟 **Electron** – *Build desktop apps with ease.*  
+- 🌀 **TypeScript** – *Type-safe coding made simple.*  
+- ⚛️ **React** – *For smooth and modern UIs.*  
+- 🥗 **SASS/SCSS Loader** – *Style it your way.*  
+- 🎨 **CSS Loader** – *Handle styles effortlessly.*  
+- 📸 **Image Loader** – *Easy image imports.*  
+- 🆎 **Font Loader** – *Add custom fonts easily.*  
+- 🧹 **ESLint** – *Keep your code clean and tidy.*  
+- 📦 **Electron Forge** – *Hassle-free builds and packaging.*  
+- 📐 **Custom Window Design** – *Frame, titlebar, and menubar your way.*  
+- 🔱 **Webpack Config** – *Optimized and customizable builds.*  
+- 🧩 **Path Aliases** – *Keep your code organized.*  
+- 🗡️ **Native Modules Support** – *Use Node.js modules seamlessly.*  
+- 🔥 **Fast Refresh & HMR** – *Instant updates while coding.*  
+- 🌞 **Dark/Light Mode** – *Built-in themes to switch it up.*  
+- 🎁 **Package Bundling** – *Share your app easily.*  
 
 <br>
 
 ## Custom Electron Window Titlebar & Menus
 
-This project includes [electron-window](https://github.com/guasam/electron-window) as core of custom window components and modules.
+This project uses [electron-window](https://github.com/guasam/electron-window) to power custom window components and features.  
 
-**Following are the list of features it provides :**
+**Here’s what it offers:**
 
-- Custom Titlebar for Electron Window.
-- Easily changable platform specific controls for max/min/close buttons using `windows` or `mac` value for `platform` property with `<WindowFrame>` in renderer.
-- Titlebar menus can show/hide by pressing `alt` or `option` key.
-- Window frame `title` prop displays in titlebar center when menus are toggeled off.
-- Menu entries can be customized in `src/main/window/titlebarMenus.ts` file.
-- Menu items and windows controls UI or colors can be customized easily by modifying the `src/renderer/window` components & styles.
-
-<br>
-
-### Custom Aliases for Paths
-
-We can use predefined aliases for `import` paths already used in this project. Following are the details:
-
-| Alias         | Target Path                |
-| ------------- | -------------------------- |
-| `@assets`     | `/assets`                  |
-| `@main`       | `/src/main`                |
-| `@renderer`   | `/src/renderer`            |
-| `@common`     | `/src/common`              |
-| `@src`        | `/src`                     |
-| `@styles`     | `/src/renderer/styles`     |
-| `@components` | `/src/renderer/components` |
+- Customizable titlebar for your Electron app.  
+- Easy platform-specific controls for max/min/close buttons—just set the `platform` prop (`windows` or `mac`) in `<WindowFrame>`.  
+- Show or hide the titlebar menus by pressing the `alt` or `option` key.  
+- The `title` prop shows up in the center of the titlebar when menus are hidden.  
+- Edit menu entries in the `src/main/window/titlebarMenus.ts` file.  
+- Customize UI, colors, or window controls by tweaking the `src/renderer/window` components and styles.  
 
 
 <br>
 
-### Want to use Vite instead of Webpack bundler?
+## Custom Aliases for Paths
 
-Introducing the [ElectroVite](https://github.com/guasam/electrovite-react) project with a brief description below.
+This project includes predefined aliases to simplify `import` paths. Here’s the list:  
+
+| **Alias**      | **Target Path**              |  
+| --------------- | --------------------------- |  
+| `@assets`       | `/assets`                   |  
+| `@main`         | `/src/main`                 |  
+| `@renderer`     | `/src/renderer`             |  
+| `@common`       | `/src/common`               |  
+| `@src`          | `/src`                      |  
+| `@styles`       | `/src/renderer/styles`      |  
+| `@components`   | `/src/renderer/components`  |  
+
 
 <br>
 
@@ -75,10 +64,10 @@ Introducing the [ElectroVite](https://github.com/guasam/electrovite-react) proje
 
 ![status](https://img.shields.io/badge/ERWT-Main%20Version-blue.svg)
 
-Main version of this project contains files structure in separate context for `main` and `renderer`, with custom electron window, titlebar etc.
+The default branch of the project has a clean structure with separate contexts for `main` and `renderer`, plus custom windows, titlebars, and more.  
 
 ```bash
-git clone https://github.com/codesbiome/electron-react-webpack-typescript-2024
+git clone https://github.com/guasam/electron-react-webpack-typescript-2024
 ```
 
 <br>
@@ -89,10 +78,10 @@ git clone https://github.com/codesbiome/electron-react-webpack-typescript-2024
 
 ![status](https://img.shields.io/badge/ERWT-Minimal%20Version-0a922a.svg)
 
-Minimal version of ERWT contains very simple project files structure, no custom window, no custom titlebar & menus.
+The minimal version of ERWT has a super simple project structure "wihtout" any custom windows, titlebars, or menus. 
 
 ```bash
-git clone -b minimal https://github.com/codesbiome/electron-react-webpack-typescript-2024
+git clone -b minimal https://github.com/guasam/electron-react-webpack-typescript-2024
 ```
 
 <br>
@@ -114,9 +103,7 @@ npm install
 
 ## Start : Development
 
-To develop and run your application, you need to run following command.
-<br />
-Start electron application for development :
+To get started with development and run your app, just use this command:
 
 ```bash
 yarn start
@@ -126,7 +113,7 @@ yarn start
 
 ## Lint : Development
 
-To lint application source code using ESLint via this command :
+To lint your application’s source code with ESLint, run this:
 
 ```bash
 yarn lint
@@ -136,7 +123,7 @@ yarn lint
 
 ## Package : Production
 
-Customize and package your Electron app with OS-specific bundles (.app, .exe etc)
+Package your Electron app into OS-specific bundles (.app, .exe, etc) like this:
 
 ```bash
 yarn package
@@ -146,7 +133,7 @@ yarn package
 
 ## Make : Production
 
-Making is a way of taking your packaged application and making platform specific distributables like DMG, EXE, or Flatpak files (amongst others).
+Making takes your packaged app and creates platform-specific distributables, like DMG, EXE, or Flatpak files (and more).
 
 ```bash
 yarn make
@@ -156,7 +143,7 @@ yarn make
 
 ## Publish : Production
 
-Publishing is a way of taking the artifacts generated by the `make` command and sending them to a service somewhere for you to distribute or use as updates. (This could be your update server or an S3 bucket)
+Publishing takes the artifacts generated by the `make` command and uploads them to a service, so you can distribute or use them for updates (like an update server or an S3 bucket).
 
 ```bash
 yarn publish
@@ -166,7 +153,7 @@ yarn publish
 
 ## Packager & Makers Configuration
 
-This provides an easy way of configuring your packaged application and making platform specific distributables like DMG, EXE, or Flatpak files.
+This makes it easy to configure your packaged app and create platform-specific distributables, like DMG, EXE, or Flatpak files.
 
 This configurations file is available in :
 
@@ -174,4 +161,4 @@ This configurations file is available in :
 tools/forge/forge.config.js
 ```
 
-For further information, you can visit [Electron Forge Configuration](https://www.electronforge.io/configuration)
+For further information about packager, you can visit [Electron Forge Configuration](https://www.electronforge.io/configuration)
