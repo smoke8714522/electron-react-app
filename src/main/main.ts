@@ -2,14 +2,15 @@ import { app, shell, BrowserWindow } from 'electron';
 import { electronApp, optimizer } from '@electron-toolkit/utils';
 import { join } from 'path';
 import icon from '@/resources/build/icon.png?asset';
+import { registerWindowIPC } from '@guasam/electron-react-app/window';
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
-    autoHideMenuBar: true,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#1c1c1c',
+    frame: false,
     title: 'Electron',
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
@@ -17,6 +18,9 @@ function createWindow(): void {
       sandbox: false
     }
   });
+
+  // Register window IPC
+  registerWindowIPC(mainWindow);
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show();

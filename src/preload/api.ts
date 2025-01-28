@@ -1,14 +1,14 @@
 import { ipcRenderer } from 'electron';
 
 const api = {
-  send: (channel: string, data: any) => {
-    ipcRenderer.send(channel, data);
+  send: (channel: string, ...args: any[]) => {
+    ipcRenderer.send(channel, ...args);
   },
   receive: (channel: string, func: (...args: any[]) => void) => {
     ipcRenderer.on(channel, (_, ...args) => func(...args));
   },
-  invoke: (channel: string, data: any) => {
-    return ipcRenderer.invoke(channel, data);
+  invoke: (channel: string, ...args: any[]) => {
+    return ipcRenderer.invoke(channel, ...args);
   },
   removeAllListeners: (channel: string) => {
     ipcRenderer.removeAllListeners(channel);
