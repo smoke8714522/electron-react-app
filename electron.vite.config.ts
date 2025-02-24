@@ -12,12 +12,14 @@ export default defineConfig({
         },
       },
     },
-    plugins: [externalizeDepsPlugin()],
     resolve: {
       alias: {
-        '@/resources': resolve('resources'),
+        '@/app': resolve(__dirname, 'app'),
+        '@/lib': resolve(__dirname, 'lib'),
+        '@/resources': resolve(__dirname, 'resources'),
       },
     },
+    plugins: [externalizeDepsPlugin()],
   },
   preload: {
     build: {
@@ -25,6 +27,13 @@ export default defineConfig({
         input: {
           preload: resolve(__dirname, 'lib/preload/preload.ts'),
         },
+      },
+    },
+    resolve: {
+      alias: {
+        '@/app': resolve(__dirname, 'app'),
+        '@/lib': resolve(__dirname, 'lib'),
+        '@/resources': resolve(__dirname, 'resources'),
       },
     },
     plugins: [externalizeDepsPlugin()],
@@ -41,6 +50,8 @@ export default defineConfig({
     resolve: {
       alias: {
         '@/app': resolve(__dirname, 'app'),
+        '@/lib': resolve(__dirname, 'lib'),
+        '@/resources': resolve(__dirname, 'resources'),
       },
     },
     plugins: [react()],
