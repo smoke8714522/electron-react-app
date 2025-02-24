@@ -1,15 +1,15 @@
 export interface TitlebarMenu {
-  name: string;
-  items: TitlebarMenuItem[];
+  name: string
+  items: TitlebarMenuItem[]
 }
 
 export interface TitlebarMenuItem {
-  name: string;
-  action?: string;
-  actionParams?: (string | number | object)[];
-  actionCallback?: () => void;
-  shortcut?: string;
-  items?: TitlebarMenuItem[];
+  name: string
+  action?: string
+  actionParams?: (string | number | object)[]
+  actionCallback?: () => void
+  shortcut?: string
+  items?: TitlebarMenuItem[]
 }
 
 export const menuItems: TitlebarMenu[] = [
@@ -121,7 +121,7 @@ export const menuItems: TitlebarMenu[] = [
         action: 'window-darkmode-toggle',
         shortcut: 'Toggle',
         actionCallback: () => {
-          document.documentElement.classList.toggle('light');
+          document.documentElement.classList.toggle('light')
         },
       },
       {
@@ -155,4 +155,4 @@ export const menuItems: TitlebarMenu[] = [
       },
     ],
   },
-];
+]
