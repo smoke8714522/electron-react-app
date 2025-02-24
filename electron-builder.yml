@@ -1,5 +1,5 @@
-appId: com.guasam.glazytools
-productName: GlazyTools
+appId: com.guasam.era
+productName: ElectronReactApp
 directories:
   buildResources: resources/build
 files:
@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: GlazyTools
+  executableName: ElectronReactApp
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

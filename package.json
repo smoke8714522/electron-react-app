@@ -1,54 +1,53 @@
 {
-  "name": "app_name",
+  "name": "era",
   "version": "1.0.0",
-  "description": "An Electron application with Vue and TypeScript",
+  "description": "A modern Electron application boilerplate with React, Webpack, and TypeScript for 2024.",
   "main": "./out/main/main.js",
-  "author": "author_name",
-  "homepage": "https://electron-vite.org",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guasam/electron-react-app"
+  },
+  "author": {
+    "name": "Guasam",
+    "url": "https://github.com/guasam"
+  },
   "scripts": {
+    "dev": "electron-vite dev -w",
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts,.vue --fix",
-    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
-    "typecheck:web": "vue-tsc --noEmit -p tsconfig.web.json --composite false",
-    "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
-    "dev": "electron-vite dev -w",
-    "build": "npm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
-    "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win",
-    "build:mac": "npm run build && electron-builder --mac",
-    "build:linux": "npm run build && electron-builder --linux",
-    "build:win:bun": "electron-vite build && electron-builder --win"
+    "build:unpack": "electron-vite build && electron-builder --dir",
+    "build:win": "electron-vite build && electron-builder --win",
+    "build:mac": "electron-vite build && electron-builder --mac",
+    "build:linux": "electron-vite build && electron-builder --linux"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
-    "@electron-toolkit/utils": "^3.0.0"
+    "@electron-toolkit/utils": "^4.0.0"
   },
   "devDependencies": {
-    "@electron-toolkit/eslint-config": "^1.0.2",
-    "@electron-toolkit/eslint-config-ts": "^2.0.0",
+    "@electron-toolkit/eslint-config": "^2.0.0",
+    "@electron-toolkit/eslint-config-ts": "^3.0.0",
     "@electron-toolkit/tsconfig": "^1.0.1",
-    "@guasam/electron-react-app": "^0.4.3",
     "@rushstack/eslint-patch": "^1.10.5",
-    "@types/node": "^22.10.5",
-    "@types/react": "^19.0.4",
-    "@types/react-dom": "^19.0.2",
-    "@types/three": "^0.172.0",
+    "@types/node": "^22.13.5",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@types/three": "^0.173.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "@vue/eslint-config-prettier": "^10.1.0",
-    "@vue/eslint-config-typescript": "^14.2.0",
-    "electron": "^33.3.1",
+    "@vue/eslint-config-prettier": "^10.2.0",
+    "@vue/eslint-config-typescript": "^14.4.0",
+    "electron": "^34.2.0",
     "electron-builder": "^25.1.8",
-    "electron-vite": "^2.3.0",
-    "eslint": "^9.17.0",
-    "eslint-plugin-react": "^7.37.3",
-    "gsap": "^3.12.7",
-    "prettier": "^3.4.2",
+    "electron-vite": "^3.0.0",
+    "eslint": "^9.21.0",
+    "eslint-plugin-react": "^7.37.4",
+    "prettier": "^3.5.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "three": "^0.172.0",
     "typescript": "^5.7.3",
-    "vite": "^6.0.7"
+    "vite": "^6.1.1"
   }
 }
