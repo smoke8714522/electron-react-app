@@ -37,5 +37,5 @@ export const registerWindowIPC = (mainWindow: BrowserWindow) => {
   handleIPC('web-zoom-in', () => webContents.setZoomLevel(webContents.zoomLevel + 0.5))
   handleIPC('web-zoom-out', () => webContents.setZoomLevel(webContents.zoomLevel - 0.5))
   handleIPC('web-toggle-fullscreen', () => mainWindow.setFullScreen(!mainWindow.fullScreen))
-  handleIPC('web-open-url', (e, url) => shell.openExternal(url))
+  handleIPC('web-open-url', (_e, url) => shell.openExternal(url))
 }
