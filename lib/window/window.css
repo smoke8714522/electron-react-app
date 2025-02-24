@@ -72,14 +72,19 @@
 
 .window-titlebar-icon {
   position: absolute;
-  left: 12px;
-  top: 10px;
-  height: var(--window-icon-height);
+  left: 0;
+  top: 0;
+  width: var(--window-title-margin);
+  height: 100%;
+  padding: 0 10px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .window-titlebar-icon img {
   width: 100%;
-  height: 100%;
 }
 
 .window-titlebar-title {
@@ -87,6 +92,7 @@
   font-size: var(--window-titlebar-font-size);
   margin-left: var(--window-title-margin);
   font-weight: var(--window-titlebar-font-weight, normal);
+  padding-left: 4px;
 }
 
 .window-titlebar-title[data-centered] {
