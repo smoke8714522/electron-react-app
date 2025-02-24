@@ -114,8 +114,8 @@
   flex-direction: row;
   gap: 2px;
   position: absolute;
-  top: 7px;
-  left: 42px;
+  top: 9px;
+  left: var(--window-title-margin);
   -webkit-app-region: no-drag;
   font-size: var(--window-titlebar-font-size);
 }
