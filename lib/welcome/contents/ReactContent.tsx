@@ -37,6 +37,13 @@ const ReactContent = () => {
           icon={AsterikIcon}
         />
       </div>
+
+      <p className="learn-more">
+        Learn more about React at{' '}
+        <a href="https://reactjs.org/" target="_blank" rel="noreferrer">
+          reactjs.org
+        </a>
+      </p>
     </div>
   )
 }

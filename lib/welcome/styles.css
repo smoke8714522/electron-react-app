@@ -94,3 +94,8 @@
   fill: #8aa6cf;
   margin: 0 20px;
 }
+
+.welcome-content .learn-more {
+  margin-top: 2rem;
+  font-size: 13px;
+}

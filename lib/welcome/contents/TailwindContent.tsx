@@ -37,6 +37,13 @@ const TailwindContent = () => {
           icon={AsterikIcon}
         />
       </div>
+
+      <p className="learn-more">
+        Learn more about Tailwind CSS at{' '}
+        <a href="https://tailwindcss.com/" target="_blank" rel="noreferrer">
+          tailwindcss.com
+        </a>
+      </p>
     </div>
   )
 }

@@ -42,6 +42,13 @@ const EraContent = () => {
           icon={AsterikIcon}
         />
       </div>
+
+      <p className="learn-more">
+        Learn more about Electron React App at{' '}
+        <a href="https://github.com/guasam/electron-react-app" target="_blank" rel="noreferrer">
+          github.com
+        </a>
+      </p>
     </div>
   )
 }

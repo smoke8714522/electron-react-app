@@ -37,6 +37,13 @@ const ElectronContent = () => {
           icon={AsterikIcon}
         />
       </div>
+
+      <p className="learn-more">
+        Learn more about Electron at{' '}
+        <a href="https://www.electronjs.org/" target="_blank" rel="noreferrer">
+          electronjs.org
+        </a>
+      </p>
     </div>
   )
 }

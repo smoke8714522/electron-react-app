@@ -37,6 +37,13 @@ const TypescriptContent = () => {
           icon={AsterikIcon}
         />
       </div>
+
+      <p className="learn-more">
+        Learn more about TypeScript at{' '}
+        <a href="https://www.typescriptlang.org/" target="_blank" rel="noreferrer">
+          typescriptlang.org
+        </a>
+      </p>
     </div>
   )
 }

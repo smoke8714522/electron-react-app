@@ -5,41 +5,45 @@ import AsterikIcon from '../icons/AsterikIcon'
 const ViteContent = () => {
   return (
     <div>
-      <h2>Vite</h2>
+      <h2>Electron Vite</h2>
+      <p>Combine Electron's desktop capabilities with Vite's lightning-fast development experience.</p>
       <p>
-        A next-generation frontend build tool that significantly improves the development experience. With Vite, you get
-        instant server start, lightning-fast HMR, and optimized builds out of the box.
-      </p>
-      <p>
-        Vite serves your code via native ES modules, allowing for lightning-fast hot module replacement (HMR) and an
-        instant development server startup.
+        This powerful combination delivers exceptional developer experience with instant HMR, while allowing you to
+        build feature-rich desktop applications using web technologies.
       </p>
 
       <div className="welcome-content-steps">
         <ContentStep
-          title="Lightning Fast HMR"
-          description="Hot Module Replacement that stays fast regardless of app size"
+          title="Vite Powered"
+          description="Inherit all the benefits of Vite and use the same way as Vite"
           icon={AsterikIcon}
         />
 
         <ContentStep
-          title="Optimized Build"
-          description="Rollup-powered bundling with multi-page and library mode support"
+          title="Optimize Asset Handling"
+          description="Optimize asset handling for Electron main process and renderer process"
           icon={AsterikIcon}
         />
 
         <ContentStep
-          title="Universal Plugins"
-          description="Extensive plugin system shared between dev and build"
+          title="Source Code Protection"
+          description="Compile to V8 bytecode to protect source code"
           icon={AsterikIcon}
         />
 
         <ContentStep
-          title="Zero Config"
-          description="Sensible defaults work out of the box for most projects"
+          title="Pre-configured"
+          description="Pre-configured for Electron, don't worry about configuration"
           icon={AsterikIcon}
         />
       </div>
+
+      <p className="learn-more">
+        Learn more about Electron Vite at{' '}
+        <a href="https://electron-vite.org/guide/" target="_blank" rel="noreferrer">
+          electron-vite.org
+        </a>
+      </p>
     </div>
   )
 }
