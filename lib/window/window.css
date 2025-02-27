@@ -85,6 +85,7 @@
 
 .window-titlebar-icon img {
   width: 100%;
+  max-width: 16px;
 }
 
 .window-titlebar-title {
