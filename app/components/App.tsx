@@ -1,8 +1,8 @@
+import WelcomeKit from '@/lib/welcome/WelcomeKit'
 import '../styles/app.css'
-import Welcome from './Welcome'
 
 function App() {
-  return <Welcome />
+  return <WelcomeKit />
 }
 
 export default App

@@ -1,12 +1,10 @@
 import { useState } from 'react'
-import EraShape from './shape'
+import EraShape from './EraShape'
+import EraContent from './contents/EraContent'
 import { motion, AnimatePresence } from 'framer-motion'
-import CodeWindowIcon from './CodeWindowIcon'
-import FanIcon from './FanIcon'
-import ColorSchemeIcon from './ColorSchemeIcon'
-import AsterikIcon from './AsterikIcon'
+import './styles.css'
 
-export default function Welcome() {
+export default function WelcomeKit() {
   const [activePath, setActivePath] = useState<number>(5)
 
   const handlePathHover = (index: number) => {
@@ -53,68 +51,6 @@ export default function Welcome() {
         </motion.div>
       </AnimatePresence>
       <EraShape onPathHover={handlePathHover} onPathReset={handlePathReset} />
-    </div>
-  )
-}
-
-const ContentStep = ({
-  title,
-  description,
-  icon: Icon,
-}: {
-  title: string
-  description: string
-  icon: React.ComponentType
-}) => {
-  return (
-    <div className="welcome-content-step">
-      <Icon />
-      <div>
-        <h3>{title}</h3>
-        <p>{description}</p>
-      </div>
-    </div>
-  )
-}
-
-const EraContent = () => {
-  return (
-    <div>
-      <h2>Electron React App</h2>
-      <p>
-        Nobis minus voluptatibus pariatur dignissimos libero quaerat iure expedita at? Asperiores nemo possimus nesciunt
-        dicta veniam aspernatur quam mollitia.
-      </p>
-      <p>
-        Vitae error, quaerat officia delectus voluptatibus explicabo quo pariatur impedit, at reprehenderit aliquam a
-        ipsum quas voluptatem. Quo pariatur asperiores eum amet.
-      </p>
-
-      <div className="welcome-content-steps">
-        <ContentStep
-          title="Custom Window Titlebar & Menus"
-          description="Customize the look and feel of the application window"
-          icon={CodeWindowIcon}
-        />
-
-        <ContentStep
-          title="Fast & Hot Reload"
-          description="Make changes to your code and see the changes instantly"
-          icon={FanIcon}
-        />
-
-        <ContentStep
-          title="Dark & Light Mode"
-          description="Switch between dark and light mode with a click of a button"
-          icon={ColorSchemeIcon}
-        />
-
-        <ContentStep
-          title="Improved Project Structure"
-          description="Organized project with a better folder structure to get you started"
-          icon={AsterikIcon}
-        />
-      </div>
     </div>
   )
 }
