@@ -36,7 +36,7 @@
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  font-size: 1.25rem;
+  font-size: 1.05rem;
   font-weight: bold;
   opacity: 0.9;
 }
@@ -51,7 +51,8 @@
 .welcome-content h2 {
   font-size: 1.5rem;
   font-weight: 600;
-  margin-bottom: 20px;
+  margin-bottom: 1.5rem;
+  margin-top: 1rem;
 }
 
 .welcome-content p {
