@@ -10,7 +10,13 @@ const pathTypes = [
   { name: 'ERA' },
 ]
 
-const EraShapeIcon = (props) => {
+interface EraShapeIconProps {
+  onPathHover?: (index: number, name: string) => void
+  onPathReset?: () => void
+  [key: string]: any
+}
+
+const EraShape = ({ onPathHover, onPathReset, ...props }: EraShapeIconProps) => {
   const [hoveredPath, setHoveredPath] = useState('ERA')
   const timeoutRef = useRef<number | null>(null)
 
@@ -21,11 +27,17 @@ const EraShapeIcon = (props) => {
       timeoutRef.current = null
     }
     setHoveredPath(pathTypes[index].name)
+    // Emit the hover event with the path index and name
+    if (onPathHover) {
+      onPathHover(index, pathTypes[index].name)
+    }
   }
   const handleMouseLeave = () => {
     timeoutRef.current = window.setTimeout(() => {
       setHoveredPath('ERA')
       timeoutRef.current = null
+      // Emit the reset event when the mouse leaves the shape
+      if (onPathReset) onPathReset()
     }, 1000)
   }
 
@@ -93,4 +105,4 @@ const EraShapeIcon = (props) => {
   )
 }
 
-export default EraShapeIcon
+export default EraShape
