@@ -6,6 +6,7 @@ import type { TitlebarMenu, TitlebarMenuItem } from '../titlebarMenus'
 export const Titlebar = () => {
   const { title, icon, titleCentered, menuItems } = useWindowContext().titlebar
   const { menusVisible, setMenusVisible, closeActiveMenu } = useTitlebarContext()
+  const wcontext = useWindowContext().window
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -27,10 +28,13 @@ export const Titlebar = () => {
   }, [menusVisible])
 
   return (
-    <div className="window-titlebar">
-      <div className="window-titlebar-icon">
-        <img src={icon} />
-      </div>
+    <div className={`window-titlebar ${wcontext?.platform ? `platform-${wcontext.platform}` : ''}`}>
+      {wcontext?.platform === 'win32' && (
+        <div className="window-titlebar-icon">
+          <img src={icon} />
+        </div>
+      )}
+
       <div
         className="window-titlebar-title"
         {...(titleCentered && { 'data-centered': true })}
@@ -39,7 +43,7 @@ export const Titlebar = () => {
         {title}
       </div>
       {menusVisible && <TitlebarMenu />}
-      <TitlebarControls />
+      {wcontext?.platform === 'win32' && <TitlebarControls />}
     </div>
   )
 }

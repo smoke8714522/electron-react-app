@@ -5,6 +5,7 @@
   --window-titlebar-height: 40px;
   --window-titlebar-font-size: 13px;
   --window-scrollbar-width: 12px;
+  --window-mac-titlebar-controls-margin: 80px;
   --window-background-transition-duration: 0.3s;
 
   --window-c-background: #1c1c1c;
@@ -210,4 +211,11 @@
 
 .window-content::-webkit-scrollbar-thumb:hover {
   background-color: var(--window-c-scrollbar-thumb-hover);
+}
+
+.platform-darwin .window-titlebar-title {
+  margin-left: var(--window-mac-titlebar-controls-margin);
+}
+.platform-darwin .window-titlebar-menu {
+  left: var(--window-mac-titlebar-controls-margin);
 }
