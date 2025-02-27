@@ -10,7 +10,6 @@ export default function Welcome() {
   const [activePath, setActivePath] = useState<number>(5)
 
   const handlePathHover = (index: number) => {
-    console.log('Hovered path:', index)
     setActivePath(index)
   }
 
@@ -38,10 +37,9 @@ export default function Welcome() {
   }
 
   return (
-    <div style={{ display: 'flex' }}>
+    <div className="welcome-content">
       <AnimatePresence mode="wait">
         <motion.div
-          className="welcome-content"
           key={'content-' + activePath}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -59,6 +57,26 @@ export default function Welcome() {
   )
 }
 
+const ContentStep = ({
+  title,
+  description,
+  icon: Icon,
+}: {
+  title: string
+  description: string
+  icon: React.ComponentType
+}) => {
+  return (
+    <div className="welcome-content-step">
+      <Icon />
+      <div>
+        <h3>{title}</h3>
+        <p>{description}</p>
+      </div>
+    </div>
+  )
+}
+
 const EraContent = () => {
   return (
     <div>
@@ -72,10 +90,31 @@ const EraContent = () => {
         ipsum quas voluptatem. Quo pariatur asperiores eum amet.
       </p>
 
-      <CodeWindowIcon />
-      <FanIcon />
-      <ColorSchemeIcon />
-      <AsterikIcon />
+      <div className="welcome-content-steps">
+        <ContentStep
+          title="Custom Window Titlebar & Menus"
+          description="Customize the look and feel of the application window"
+          icon={CodeWindowIcon}
+        />
+
+        <ContentStep
+          title="Fast & Hot Reload"
+          description="Make changes to your code and see the changes instantly"
+          icon={FanIcon}
+        />
+
+        <ContentStep
+          title="Dark & Light Mode"
+          description="Switch between dark and light mode with a click of a button"
+          icon={ColorSchemeIcon}
+        />
+
+        <ContentStep
+          title="Improved Project Structure"
+          description="Organized project with a better folder structure to get you started"
+          icon={AsterikIcon}
+        />
+      </div>
     </div>
   )
 }
