@@ -1,10 +1,19 @@
-import { createContext, useContext, useEffect } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { Titlebar } from './Titlebar'
 import type { TitlebarMenu } from '../titlebarMenus'
 import { TitlebarContextProvider } from './TitlebarContext'
 
 interface WindowContextProps {
   titlebar: TitlebarProps
+  readonly window: WindowInitProps
+}
+
+interface WindowInitProps {
+  width: number
+  height: number
+  maximizable: boolean
+  minimizable: boolean
+  platform: string
 }
 
 interface WindowContextProviderProps {
@@ -22,6 +31,8 @@ export interface TitlebarProps {
 const WindowContext = createContext<WindowContextProps | undefined>(undefined)
 
 export const WindowContextProvider = ({ children, titlebar }: WindowContextProviderProps) => {
+  const [initProps, setInitProps] = useState<WindowInitProps | undefined>()
+
   const defaultTitlebar: TitlebarProps = {
     title: 'Electron React App',
     icon: 'appIcon.png',
@@ -29,9 +40,13 @@ export const WindowContextProvider = ({ children, titlebar }: WindowContextProvi
     menuItems: [],
   }
 
+  // Merge default titlebar props with user defined props
   titlebar = { ...defaultTitlebar, ...titlebar }
 
   useEffect(() => {
+    // Load window init props
+    window.api.invoke('init-window').then((value: WindowInitProps) => setInitProps(value))
+
     // Add class to parent element
     const parent = document.querySelector('.window-content')?.parentElement
     if (parent) {
@@ -40,7 +55,7 @@ export const WindowContextProvider = ({ children, titlebar }: WindowContextProvi
   }, [])
 
   return (
-    <WindowContext value={{ titlebar }}>
+    <WindowContext value={{ titlebar, window: initProps! }}>
       <TitlebarContextProvider>
         <Titlebar />
       </TitlebarContextProvider>

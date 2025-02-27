@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useWindowContext } from './WindowContext'
 import { useTitlebarContext } from './TitlebarContext'
 import type { TitlebarMenu, TitlebarMenuItem } from '../titlebarMenus'
@@ -166,19 +166,12 @@ const TitlebarControls = () => {
     'M 0,0 0,0.7 4.3,5 0,9.3 0,10 0.7,10 5,5.7 9.3,10 10,10 10,9.3 5.7,5 10,0.7 10,0 9.3,0 5,4.3 0.7,0 Z'
   const maximizePath = 'M 0,0 0,10 10,10 10,0 Z M 1,1 9,1 9,9 1,9 Z'
   const minimizePath = 'M 0,5 10,5 10,6 0,6 Z'
-
-  const [minimzable, setMinimizable] = useState(false)
-  const [maximizable, setMaximizable] = useState(false)
-
-  useEffect(() => {
-    window.api.invoke('is-window-minimizable').then((value: boolean) => setMinimizable(value))
-    window.api.invoke('is-window-maximizable').then((value: boolean) => setMaximizable(value))
-  }, [])
+  const wcontext = useWindowContext().window
 
   return (
     <div className="window-titlebar-controls">
-      {minimzable && <TitlebarControlButton label="minimize" svgPath={minimizePath} />}
-      {maximizable && <TitlebarControlButton label="maximize" svgPath={maximizePath} />}
+      {wcontext?.minimizable && <TitlebarControlButton label="minimize" svgPath={minimizePath} />}
+      {wcontext?.maximizable && <TitlebarControlButton label="maximize" svgPath={maximizePath} />}
       <TitlebarControlButton label="close" svgPath={closePath} />
     </div>
   )
