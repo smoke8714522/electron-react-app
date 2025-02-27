@@ -1,7 +1,8 @@
 import '../styles/app.css'
+import Welcome from './Welcome'
 
 function App() {
-  return <div>Hello Guasam</div>
+  return <Welcome />
 }
 
 export default App

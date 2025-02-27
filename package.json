@@ -44,6 +44,7 @@
     "electron-vite": "^3.0.0",
     "eslint": "^9.21.0",
     "eslint-plugin-react": "^7.37.4",
+    "framer-motion": "^12.4.7",
     "prettier": "^3.5.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
