@@ -144,7 +144,8 @@ const TitlebarMenuPopupItem = ({ item }: { item: TitlebarMenuItem }) => {
       return
     }
 
-    ;(window as any).api.invoke(item.action, ...(item.actionParams ? item.actionParams : []))
+    // Invoke the action with the provided parameters
+    window.api.invoke(item.action!, ...(item.actionParams ? item.actionParams : []))
     setActiveMenuIndex(null)
   }
 
@@ -170,8 +171,8 @@ const TitlebarControls = () => {
   const [maximizable, setMaximizable] = useState(false)
 
   useEffect(() => {
-    ;(window as any).api.invoke('is-window-minimizable').then((value: boolean) => setMinimizable(value))
-    ;(window as any).api.invoke('is-window-maximizable').then((value: boolean) => setMaximizable(value))
+    window.api.invoke('is-window-minimizable').then((value: boolean) => setMinimizable(value))
+    window.api.invoke('is-window-maximizable').then((value: boolean) => setMaximizable(value))
   }, [])
 
   return (
@@ -187,14 +188,16 @@ const TitlebarControlButton = ({ svgPath, label }: { svgPath: string; label: str
   const handleAction = () => {
     switch (label) {
       case 'minimize':
-        ;(window as any).api.invoke('window-minimize')
+        window.api.invoke('window-minimize')
         break
       case 'maximize':
-        ;(window as any).api.invoke('window-maximize-toggle')
+        window.api.invoke('window-maximize-toggle')
         break
       case 'close':
-        ;(window as any).api.invoke('window-close')
+        window.api.invoke('window-close')
         break
+      default:
+        console.warn(`Unhandled action for label: ${label}`)
     }
   }
 
