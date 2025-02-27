@@ -1,17 +1,42 @@
 import React from 'react'
+import ContentStep from '../ContentStep'
+import AsterikIcon from '../icons/AsterikIcon'
 
 const ReactContent = () => {
   return (
     <div>
-      <h2>React Application</h2>
+      <h2>React</h2>
+      <p>A JavaScript library for building user interfaces with a component-based architecture.</p>
       <p>
-        Nobis minus voluptatibus pariatur dignissimos libero quaerat iure expedita at? Asperiores nemo possimus nesciunt
-        dicta veniam aspernatur quam mollitia.
+        React lets you build user interfaces out of individual pieces called components, creating reusable and
+        maintainable code for your applications.
       </p>
-      <p>
-        Vitae error, quaerat officia delectus voluptatibus explicabo quo pariatur impedit, at reprehenderit aliquam a
-        ipsum quas voluptatem. Quo pariatur asperiores eum amet.
-      </p>
+
+      <div className="welcome-content-steps">
+        <ContentStep
+          title="Component-Based"
+          description="Build encapsulated components that manage their state for complex UIs"
+          icon={AsterikIcon}
+        />
+
+        <ContentStep
+          title="Declarative"
+          description="Create interactive UIs with simple views for each application state"
+          icon={AsterikIcon}
+        />
+
+        <ContentStep
+          title="Learn Once, Write Anywhere"
+          description="Develop new features without rewriting existing code"
+          icon={AsterikIcon}
+        />
+
+        <ContentStep
+          title="Virtual DOM"
+          description="Lightweight DOM representation for optimal rendering performance"
+          icon={AsterikIcon}
+        />
+      </div>
     </div>
   )
 }
