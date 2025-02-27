@@ -62,3 +62,9 @@ svg > path:hover {
   font-weight: bold;
   opacity: 0.9;
 }
+
+.welcome-content svg {
+  width: 20px;
+  height: 20px;
+  fill: #628cca;
+}

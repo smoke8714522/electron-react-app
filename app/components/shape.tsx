@@ -38,7 +38,7 @@ const EraShape = ({ onPathHover, onPathReset, ...props }: EraShapeIconProps) => 
       timeoutRef.current = null
       // Emit the reset event when the mouse leaves the shape
       if (onPathReset) onPathReset()
-    }, 1000)
+    }, 5000)
   }
 
   return (
