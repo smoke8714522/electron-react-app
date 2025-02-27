@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import './styles.css'
 
 export default function WelcomeKit() {
-  const [activePath, setActivePath] = useState<number>(5)
+  const [activePath, setActivePath] = useState<number>(0)
 
   const handlePathHover = (index: number) => {
     setActivePath(index)
