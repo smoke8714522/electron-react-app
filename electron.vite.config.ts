@@ -1,5 +1,6 @@
 import { resolve } from 'path'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 
 console.log(resolve(__dirname, 'app/index.html'))
@@ -54,6 +55,6 @@ export default defineConfig({
         '@/resources': resolve(__dirname, 'resources'),
       },
     },
-    plugins: [react()],
+    plugins: [react(), tailwindcss()],
   },
 })
