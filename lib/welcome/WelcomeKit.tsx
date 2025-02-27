@@ -44,7 +44,7 @@ export default function WelcomeKit() {
       <AnimatePresence mode="wait">
         <motion.div
           key={'content-' + activePath}
-          style={{ zIndex: 2 }}
+          style={{ zIndex: 2, flex: 1 }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

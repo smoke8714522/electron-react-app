@@ -1,3 +1,18 @@
+#era-shape {
+  position: relative;
+  width: 250px;
+}
+
+#era-shape > span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 1.05rem;
+  font-weight: bold;
+  opacity: 0.9;
+}
+
 #era-shape svg {
   padding: 20px;
   overflow: visible;
@@ -24,21 +39,6 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-#era-shape {
-  position: relative;
-  width: 500px;
-}
-
-#era-shape > span {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 1.05rem;
-  font-weight: bold;
-  opacity: 0.9;
 }
 
 .welcome-content {
