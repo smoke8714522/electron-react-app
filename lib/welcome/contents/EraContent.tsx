@@ -25,8 +25,8 @@ const EraContent = () => {
         />
 
         <ContentStep
-          title="Fast & Hot Reload"
-          description="Make changes to your code and see the changes instantly"
+          title="Lightning Fast HMR"
+          description="Hot Module Replacement that stays fast regardless of app size"
           icon={FanIcon}
         />
 
