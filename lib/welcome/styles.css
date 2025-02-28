@@ -1,3 +1,11 @@
+:root {
+  --welcome-c-variant: #8aa6cf;
+}
+
+:root.light {
+  --welcome-c-variant: #43679d;
+}
+
 #era-shape {
   position: relative;
   width: 250px;
@@ -56,7 +64,7 @@
 
 .welcome-content p {
   margin-bottom: 1rem;
-  color: #ffffff8f;
+  color: var(--window-c-text);
   font-size: 15px;
   font-weight: 400;
 }
@@ -76,7 +84,7 @@
 
 .welcome-content-step h3 {
   margin-bottom: 2px;
-  color: #8aa6cf;
+  color: var(--welcome-c-variant);
   font-weight: 500;
   font-size: 15px;
 }
@@ -85,13 +93,14 @@
   opacity: 0.8;
   font-size: 14px;
   margin: 0;
-  font-weight: 300;
+  font-weight: 400;
 }
 
 .welcome-content-step svg {
   width: 20px;
   height: 20px;
-  fill: #8aa6cf;
+  fill: var(--welcome-c-variant);
+  /* fill: #8aa6cf; */
   margin: 0 20px;
 }
 
