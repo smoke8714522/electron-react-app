@@ -38,8 +38,6 @@
     "@types/react-dom": "^19.0.4",
     "@types/three": "^0.173.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "@vue/eslint-config-prettier": "^10.2.0",
-    "@vue/eslint-config-typescript": "^14.4.0",
     "electron": "^34.2.0",
     "electron-builder": "^25.1.8",
     "electron-vite": "^3.0.0",
