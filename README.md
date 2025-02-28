@@ -9,7 +9,13 @@ A modern Electron application template with React, Vite, TypeScript, and Tailwin
 
 <br />
 
-https://github.com/user-attachments/assets/627903cd-bb17-4493-a66a-b8ebf7257600
+<p align="center">
+    <img src="app/assets/era-preview.png" />
+</p>
+
+<p align="center">
+    <a href="https://imgur.com/B5pGkDk">Watch Video Preview</a>
+</p>
 
 <br />
 
