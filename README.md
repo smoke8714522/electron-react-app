@@ -10,7 +10,7 @@ A modern Electron application template with React, Vite, TypeScript, and Tailwin
 <br />
 
 <p align="center">
-    <img src="app/assets/era-preview.png" />
+    <img src="app/assets/era-preview.png" target="_blank" />
 </p>
 
 <p align="center">
@@ -29,14 +29,15 @@ A modern Electron application template with React, Vite, TypeScript, and Tailwin
 - 🔥 Fast HMR - Hot Module Replacement
 - 🎨 Dark/Light Mode - Built-in theme switching
 - 🪟 Custom Window & Titlebar - Professional-looking window with custom titlebar & file menus.
-- 🧩 Well-organized Project Structure - Clear separation of main and renderer processes
+- 📐 Clean Project Structure - Separation of main and renderer processes
+- 🧩 Path Aliases – Keep your code organized.
 - 🛠️ Electron Builder - Configured for packaging applications
 
 <br />
 
 ### Prerequisites
 
-- Node.js (v28 or higher)
+- Node.js (v18 or higher)
 - npm, yarn, pnpm, or bun
 
 <br />
