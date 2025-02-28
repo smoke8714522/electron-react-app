@@ -19,7 +19,7 @@ A modern Electron application template with React, Vite, TypeScript, and Tailwin
 
 <br />
 
-### Features
+## Features
 
 - 🚀 Electron - Cross-platform desktop application framework
 - ⚛️ React - Component-based UI library
@@ -35,14 +35,14 @@ A modern Electron application template with React, Vite, TypeScript, and Tailwin
 
 <br />
 
-### Prerequisites
+## Prerequisites
 
 - Node.js (v18 or higher)
 - npm, yarn, pnpm, or bun
 
 <br />
 
-### Installation
+## Installation
 
 Clone the repository and install dependencies:
 
@@ -63,7 +63,7 @@ bun install
 
 <br />
 
-### Development
+## Development
 
 Start the development server:
 
@@ -81,7 +81,7 @@ This will start Electron with hot-reload enabled so you can see changes in real 
 
 <br />
 
-### Building for Production
+## Building for Production
 
 Build the application for your platform:
 
@@ -103,7 +103,7 @@ Distribution files will be located in the `dist` directory.
 
 <br />
 
-### IPC Communication
+## IPC Communication
 
 The app uses a secure IPC (Inter-Process Communication) system to communicate between the renderer and main processes:
 
@@ -120,7 +120,7 @@ window.api.receive('channel-name', (data) => {
 const result = await window.api.invoke('channel-name', ...args)
 ```
 
-### Custom Window Components
+## Custom Window Components
 
 This template includes a custom window implementation with:
 
@@ -132,7 +132,7 @@ This template includes a custom window implementation with:
 
 <br />
 
-### Tailwind Styling
+## Tailwind Styling
 
 The project supports **TailwindCSS** for styling:
 
@@ -147,13 +147,13 @@ const Button = () => (
 
 <br />
 
-### Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
 <br />
 
-### Project Structure
+## Project Structure
 
 <!-- prettier-ignore-start -->
 ```markdown
@@ -163,7 +163,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 │   │   ├── App.tsx             # Application component
 │   ├── styles/                 # CSS and Tailwind files
 │   │   ├── app.css             # App stylesheet
-│   │   └── tailwind.css        # Theme variables for light/dark mode
+│   │   └── tailwind.css        # Tailwind stylesheet
 │   ├── index.html              # Entry HTML file
 │   └── renderer.tsx            # Renderer process entry
 ├── lib/                        # Shared library code
@@ -173,7 +173,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 │   ├── preload/                # Preload scripts for IPC
 │   │   ├── index.ts            # Preload script entry
 │   │   └── api.ts              # Exposed API for renderer
-│   ├── welcome/                # Welcome screen components
+│   ├── welcome/                # Welcome kit components
 │   └── window/                 # Custom window implementation
 ├── resources/                  # Build resources
 ├── .eslintrc                   # ESLint configuration
