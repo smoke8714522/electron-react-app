@@ -120,6 +120,8 @@ window.api.receive('channel-name', (data) => {
 const result = await window.api.invoke('channel-name', ...args)
 ```
 
+<br />
+
 ## Custom Window Components
 
 This template includes a custom window implementation with:
@@ -149,7 +151,7 @@ const Button = () => (
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Feel free to submit a Pull Request.
 
 <br />
 
