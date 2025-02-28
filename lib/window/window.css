@@ -7,6 +7,7 @@
   --window-scrollbar-width: 12px;
   --window-mac-titlebar-controls-margin: 80px;
   --window-background-transition-duration: 0.3s;
+  --window-c-popup-font-weight: normal;
 
   --window-c-background: #1c1c1c;
   --window-c-titlebar-background: #282828;
@@ -15,7 +16,7 @@
   --window-c-hover: #3c3c3c;
   --window-c-popup-background: #282828;
   --window-c-popup-border: #3c3c3c;
-  --window-c-popup-shadow: hsla(0, 0%, 0%, 0.5);
+  --window-c-popup-shadow: #00000080;
   --window-c-separator: #80808033;
   --window-c-control-hover: #0000003d;
   --window-c-control-close-hover: #c42b1c;
@@ -28,13 +29,14 @@
 :root.light {
   color-scheme: light;
   --window-titlebar-font-weight: 500;
+  --window-c-popup-font-weight: 500;
 
   --window-c-background: #fff;
   --window-c-titlebar-background: #fff;
   --window-c-titlebar-border: #8080801a;
   --window-c-text: #000000c8;
-  --window-c-hover: #dcdcdc;
-  --window-c-popup-background: #f0f0f0;
+  --window-c-hover: #ececec;
+  --window-c-popup-background: #f6f6f6;
   --window-c-popup-border: #dcdcdc;
   --window-c-popup-shadow: hsla(0, 0%, 0%, 0.1);
   --window-c-separator: #80808033;
@@ -160,6 +162,7 @@
   padding: 5px 18px;
   text-shadow: 1px 1px var(--window-c-text-shadow);
   justify-content: space-between;
+  font-weight: var(--window-c-popup-font-weight);
 }
 
 .titlebar-menuItem .menuItem-shortcut {
