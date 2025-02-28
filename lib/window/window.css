@@ -10,6 +10,7 @@
 
   --window-c-background: #1c1c1c;
   --window-c-titlebar-background: #282828;
+  --window-c-titlebar-border: transparent;
   --window-c-text: #ffffffc8;
   --window-c-hover: #3c3c3c;
   --window-c-popup-background: #282828;
@@ -29,7 +30,8 @@
   --window-titlebar-font-weight: 500;
 
   --window-c-background: #fff;
-  --window-c-titlebar-background: #f0f0f0;
+  --window-c-titlebar-background: #fff;
+  --window-c-titlebar-border: #8080801a;
   --window-c-text: #000000c8;
   --window-c-hover: #dcdcdc;
   --window-c-popup-background: #f0f0f0;
@@ -74,6 +76,7 @@
   background-color: var(--window-c-titlebar-background);
   color: var(--window-c-text);
   transition: background-color var(--window-background-transition-duration) ease;
+  border-bottom: 1px solid var(--window-c-titlebar-border);
 }
 
 .window-titlebar-icon {
