@@ -9,8 +9,8 @@ const EraContent = () => {
     <div>
       <h2>Electron React App</h2>
       <p>
-        Welcome to the Electron React App! This application provides a custom window titlebar, rapid hot reloads, and an
-        enhanced developer experience.
+        Welcome to the Electron React App! This is a prebuilt template that provides a solid foundation for
+        developing desktop applications with Electron and React.
       </p>
       <p>
         This project is built with Electron, React, Vite, TypeScript, and Tailwind CSS to provide a modern development
