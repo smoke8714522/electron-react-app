@@ -134,6 +134,25 @@ This template includes a custom window implementation with:
 
 <br />
 
+### Titlebar Menu Toggle
+
+The titlebar menu can be toggled using:
+
+- **Windows**: Press the `Alt` key
+- **macOS**: Press the `Option (⌥)` key
+
+When you press the toggle key:
+
+- If the menu is hidden, it becomes visible
+- If the menu is already visible, it gets hidden
+- The menu only toggles if menu items are available
+
+### Customizing Menu Items
+
+To add, remove or modify menu items, update the `lib/window/titlebarMenus.ts` file:
+
+<br />
+
 ## Tailwind Styling
 
 The project supports **TailwindCSS** for styling:
