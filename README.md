@@ -147,9 +147,11 @@ When you press the toggle key:
 - If the menu is already visible, it gets hidden
 - The menu only toggles if menu items are available
 
+<br />
+
 ### Customizing Menu Items
 
-To add, remove or modify menu items, update the `lib/window/titlebarMenus.ts` file:
+To add, remove or modify menu items, update the `lib/window/titlebarMenus.ts` file.
 
 <br />
 
