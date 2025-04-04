@@ -12,6 +12,12 @@
     "name": "Guasam",
     "url": "https://github.com/guasam"
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
+  },
   "scripts": {
     "dev": "electron-vite dev -w",
     "format": "prettier --write .",
