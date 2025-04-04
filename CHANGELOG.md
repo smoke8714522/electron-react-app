@@ -4,6 +4,13 @@ All notable changes to the electron-react-app (ERA) are listed here.
 
 <br>
 
+### v10.1.0
+
+- Add pnpm configuration for only built dependencies
+- Prevent app from quitting on macOS when all windows are closed
+
+<br>
+
 ### v10.0.0
 
 - 🚀 Major overhaul: Complete migration from Webpack to Vite
