@@ -4,7 +4,7 @@ import { AssetWithThumbnail, BulkImportResult, UpdateAssetPayload } from '../hoo
 // Assuming react-icons is installed for a better UX
 import { 
     FiFilter, FiRefreshCw, FiGrid, FiList, FiChevronLeft, FiChevronRight, FiUploadCloud, 
-    FiSearch, FiSliders, FiTag, FiTrash2, FiEdit, FiX, FiEye, FiPackage, FiSidebar
+    FiSearch, FiSliders, FiTag, FiTrash2, FiEdit, FiEye, FiPackage
 } from 'react-icons/fi';
 
 // PRD §4.1 Library View: Define props for LibraryView
