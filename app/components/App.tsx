@@ -219,7 +219,7 @@ export default function App() {
   )
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-gray-900 text-white overflow-hidden">
+    <div className="flex flex-col h-screen w-screen bg-gray-900 text-white overflow-hidden min-h-0">
       <nav className="bg-gray-800 shadow-md flex-shrink-0">
         <div className="w-full px-4 py-2 flex items-center justify-between">
           <h1 className="text-lg font-bold">Ad Vault</h1>

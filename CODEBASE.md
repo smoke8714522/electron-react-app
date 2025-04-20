@@ -76,11 +76,11 @@ The project follows a structure separating the Electron main process, the React 
     *   Top-level UI component using Tailwind CSS.
     *   Implements a simple top navigation bar ("Ad Vault" title + tabs) to switch between views ('Dashboard' and 'Library'). Navigation is edge-to-edge.
     *   Conditionally renders either the original basic asset list/edit view (as 'Dashboard') or the `LibraryView` based on selected tab state.
-    *   Root element uses Flexbox (`h-screen w-screen flex flex-col`) to ensure the layout fills the entire window edge-to-edge without extra padding (PRD §5 Non-Functional Requirements). Main content area handles scrolling.
+    *   Root element uses Flexbox (`h-screen w-screen flex flex-col min-h-0`) to ensure the layout fills the entire window edge-to-edge without extra padding or child overflow (PRD §5 Non-Functional Requirements). Main content area handles scrolling.
 *   **Main Library View Component**: `app/components/LibraryView.tsx` (Refactored)
     *   Main view for browsing and managing assets, styled with Tailwind CSS.
     *   Features a two-pane layout implemented with Flexbox (PRD §4.1 Library View):
-        *   **Collapsible Left Sidebar** (`<aside>`): Width transitions between `w-64` (expanded) and `w-16` (icon-only collapsed state). Contains filter controls:
+        *   **Collapsible Left Sidebar** (`<aside>`): Uses `flex flex-col h-full min-h-0`. Width transitions between `w-64` (expanded) and `w-16` (icon-only collapsed state). Contains filter controls:
             *   **Search Input**: Basic text search (currently unused for backend filtering but available).
             *   **Year Filter**: Dropdown (`<select>`) populated with distinct years from loaded assets. Allows selecting a specific year or "All Years".
             *   **Advertiser Filter**: Dropdown (`<select>`) populated with distinct advertisers from loaded assets. Allows selecting a specific advertiser or "All Advertisers".
@@ -88,14 +88,16 @@ The project follows a structure separating the Electron main process, the React 
             *   **Shares Filter**: Two numeric input fields (`<input type="number">`) for Minimum and Maximum shares. Allows filtering by a range.
             *   **Tag Filter**: Placeholder for future tag filtering implementation.
             *   Sidebar content adapts or hides when collapsed. Toggle button in the sidebar header.
+            *   The filter controls section (`div`) within the sidebar uses `overflow-y-auto flex-1 min-h-0` to enable independent scrolling when filters exceed available space.
         *   **Main Content Area** (`<main>`): Takes remaining width (`flex-1`). Contains a sticky top toolbar and the scrollable asset display area.
             *   **Sticky Top Toolbar**: Contains main action buttons ("Bulk Import", "Refresh"), a "Sort by" dropdown, a "Grid/List" view toggle, and **conditional batch action controls** that appear when assets are selected (`selectedCount`, "Edit Metadata" button, "Delete Selected" button). Toolbar remains visible when scrolling assets.
                 *   **Sort Dropdown**: Allows sorting by Newest/Oldest (default), FileName (A-Z, Z-A), Year (High-Low, Low-High), Shares (High-Low, Low-High).
             *   **Asset Display Area**: Scrollable area (`overflow-y-auto`). Displays assets (fetched based on current filters/sort) using either `AssetCard` components in a responsive grid (default) or `AssetListItem` components in a table (list view) based on the view toggle state.
+            *   **Asset Display Area**: Scrollable area (`overflow-y-auto`). Displays assets (fetched based on current filters/sort) using either `AssetCard` components in a responsive grid (default) or inline `<tr>`/`<td>` elements within a `<table>` (list view) based on the view toggle state.
                 *   The grid container uses `items-start` and `content-start` to prevent cards from stretching vertically, especially in the last row when it's not full.
     *   `AssetCard`: Displays thumbnail, key metadata (`fileName`, `year`, `advertiser`, `niche`, `shares`), and includes a checkbox for multi-select. Clicking the card toggles selection.
-    *   `AssetListItem`: Displays thumbnail, key metadata columns (`fileName`, `year`, `advertiser`, `niche`, `shares`), file info, and includes a checkbox for multi-select.
-    *   Implements multi-select functionality via checkboxes on `AssetCard` / `AssetListItem`. Selected count and batch actions ("Edit Metadata", "Delete Selected") appear in the main content toolbar.
+    *   `AssetListItem`: Component removed. List view renders table rows (`<tr>`) with table data (`<td>`) cells directly within the `<tbody>`.
+    *   Implements multi-select functionality via checkboxes on `AssetCard` or within the list view `<tr>`. Selected count and batch actions ("Edit Metadata", "Delete Selected") appear in the main content toolbar.
     *   Triggers `BulkEditModal` when the "Edit Metadata" batch action is clicked.
     *   Filtering and sorting changes trigger an immediate re-fetch of assets via `useAssets.fetchAssets`.
 *   **Bulk Edit Modal Component**: `app/components/BulkEditModal.tsx` (New)
@@ -123,7 +125,7 @@ The project follows a structure separating the Electron main process, the React 
 *   **Asset Deletion**: Single asset deletion via `deleteAsset` hook. Batch deletion implemented in `LibraryView` toolbar by iterating calls to `deleteAsset`.
 *   **Filtering & Sorting**: Implemented in `LibraryView` state, triggering `fetchAssets` hook with filter/sort parameters. `get-assets` IPC handler in `main.ts` dynamically builds the SQL query.
 *   **File Storage**: Files stored in `/vault/`, DB stores relative `filePath`.
-*   **Previews/Thumbnails**: Handled by `ThumbnailService`, cached in user data. `get-assets` returns `thumbnailPath`. `LibraryView` displays these in `AssetCard` and `AssetListItem`.
+*   **Previews/Thumbnails**: Handled by `ThumbnailService`, cached in user data. `get-assets` returns `thumbnailPath`. `LibraryView` displays these in `AssetCard` and the list view table cells.
 *   **Database**: `better-sqlite3`, `vaultDatabase.db` in user data path. Schema includes migration for `adspower` -> `shares` rename.
 *   **Path Handling**: `path.win32.join` for DB paths, `path.join` otherwise.
 *   **UI Layout**: `App.tsx` uses `flex flex-col h-screen w-screen` for full window layout. `LibraryView.tsx` uses `flex` for its two-pane layout, with the sidebar width controlled by state and the main content area managing its own scrolling. Tailwind CSS used throughout.

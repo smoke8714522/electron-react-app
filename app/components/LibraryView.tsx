@@ -207,8 +207,8 @@ const LibraryView: React.FC<LibraryViewProps> = ({
     return (
         // PRD §4.1 Library View: Main container with flex layout, ensures view takes full height within App's main area
         <div className="flex h-full bg-gray-900 text-white overflow-hidden">
-            {/* PRD §4.1 Library View: Collapsible Left Sidebar */} 
-            <aside className={`flex flex-col bg-gray-800 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-64' : 'w-16'} flex-shrink-0 border-r border-gray-700`}>
+            {/* PRD §4.1 Library View: Collapsible Left Sidebar - Added flex flex-col h-full min-h-0 */} 
+            <aside className={`flex flex-col h-full min-h-0 bg-gray-800 transition-all duration-300 ease-in-out ${isSidebarOpen ? 'w-64' : 'w-16'} flex-shrink-0 border-r border-gray-700`}>
                {/* Sidebar Header */} 
                <div className={`flex items-center p-4 border-b border-gray-700 flex-shrink-0 ${isSidebarOpen ? 'justify-between' : 'justify-center'}`}>
                    {isSidebarOpen && (
@@ -225,8 +225,8 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                    </button>
                </div>
                
-                {/* Filter Controls Area */} 
-                <div className={`overflow-y-auto overflow-x-hidden ${isSidebarOpen ? 'flex-grow min-h-0 p-3 space-y-4' : 'p-4 flex flex-col items-center space-y-4 pt-6'}`}>
+                {/* Filter Controls Area - Ensure flex-1, overflow-y-auto, min-h-0 for scrolling */} 
+                <div className={`overflow-y-auto overflow-x-hidden flex-1 min-h-0 ${isSidebarOpen ? 'p-3 space-y-4' : 'p-4 flex flex-col items-center space-y-4 pt-6'}`}>
                      {/* Search - Kept for potential future client-side refinement or quick search */} 
                      <div className={isSidebarOpen ? '' : 'w-full flex justify-center'}>
                          {isSidebarOpen ? (
@@ -481,6 +481,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                         <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-gray-700">
                                 <thead className="bg-gray-800">
+                                    {/* PRD §4.1 Library View: Table header for list view */}
                                     <tr>
                                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-12">Select</th>
                                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-16">Thumb</th>
@@ -495,15 +496,79 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                                     </tr>
                                 </thead>
                                 <tbody className="bg-gray-850 divide-y divide-gray-700">
-                                    {/* Map over assets prop */} 
-                                    {assets.map((asset) => (
-                                <AssetListItem 
-                                    key={asset.id} 
-                                    asset={asset} 
-                                    isSelected={selectedAssetIds.has(asset.id)}
-                                    onSelect={handleSelectAsset}
-                                />
-                            ))}
+                                    {/* PRD §4.1 Library View: Render table rows directly */}
+                                    {assets.map((asset) => {
+                                        const isSelected = selectedAssetIds.has(asset.id);
+                                        // Helper to format file size (kept local for simplicity)
+                                        const formatBytes = (bytes: number, decimals = 1): string => {
+                                            if (bytes === 0) return '0 Bytes';
+                                            const k = 1024;
+                                            const dm = decimals < 0 ? 0 : decimals;
+                                            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+                                            const i = Math.floor(Math.log(bytes) / Math.log(k));
+                                            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+                                        }
+                                        return (
+                                            <tr key={asset.id} className={`hover:bg-gray-750 ${isSelected ? 'bg-blue-900/50' : ''} transition-colors duration-150`}>
+                                                {/* Select Checkbox Cell */}
+                                                <td className="px-4 py-2 whitespace-nowrap align-middle">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={isSelected}
+                                                        onChange={(e) => handleSelectAsset(asset.id, e.target.checked)}
+                                                        className="form-checkbox h-4 w-4 text-blue-500 bg-gray-900 border-gray-600 rounded focus:ring-blue-500 focus:ring-offset-0 focus:ring-offset-gray-800 cursor-pointer"
+                                                        aria-label={`Select ${asset.fileName}`}
+                                                    />
+                                                </td>
+                                                {/* Thumbnail Cell */}
+                                                <td className="px-4 py-2 align-middle">
+                                                    <div className="w-10 h-10 bg-gray-700 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
+                                                        {asset.thumbnailPath ? (
+                                                            <img src={asset.thumbnailPath} alt={`Thumb ${asset.fileName}`} className="w-full h-full object-cover" loading="lazy"/>
+                                                        ) : (
+                                                            <FiEye size={20} className="text-gray-500" /> 
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                {/* Filename Cell */}
+                                                <td className="px-4 py-2 text-sm font-medium text-gray-200 align-middle max-w-xs truncate" title={asset.fileName}>
+                                                    {asset.fileName}
+                                                </td>
+                                                {/* Year Cell */}
+                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle">
+                                                    {asset.year || 'N/A'}
+                                                </td>
+                                                {/* Advertiser Cell */}
+                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle max-w-xs truncate" title={asset.advertiser || undefined}>
+                                                    {asset.advertiser || 'N/A'}
+                                                </td>
+                                                {/* Niche Cell */}
+                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle max-w-xs truncate" title={asset.niche || undefined}>
+                                                    {asset.niche || 'N/A'}
+                                                </td>
+                                                {/* Shares Cell */}
+                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle">
+                                                    {(asset.shares !== null && asset.shares !== undefined) ? asset.shares : 'N/A'}
+                                                </td>
+                                                {/* Size Cell */}
+                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle">
+                                                    {formatBytes(asset.size)}
+                                                </td>
+                                                {/* Created Cell */}
+                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle">
+                                                    {new Date(asset.createdAt).toLocaleDateString()}
+                                                </td>
+                                                {/* Actions Cell */} 
+                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle">
+                                                    <div className="flex items-center space-x-2">
+                                                        {/* Placeholder for inline actions - use actual buttons or links later */} 
+                                                        <button disabled className="p-1 rounded hover:bg-gray-700 opacity-50" title="Edit (Coming Soon)"><FiEdit size={14}/></button>
+                                                        <button disabled className="p-1 rounded hover:bg-gray-700 opacity-50" title="Delete (Use Batch)"><FiTrash2 size={14}/></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                          </div>
@@ -588,93 +653,6 @@ const AssetCard: React.FC<AssetCardProps> = ({ asset, isSelected, onSelect }) =>
                  {/* TODO: Display custom fields/tags */} 
             </div>
         </div>
-    );
-};
-
-// --- Asset List Item Component (Refactored for Table View) --- 
-
-interface AssetListItemProps {
-    asset: AssetWithThumbnail;
-    isSelected: boolean;
-    onSelect: (assetId: number, isSelected: boolean) => void;
-}
-
-// PRD §4.1 Library View: Component for displaying a single asset list item (Tailwind Table Row)
-const AssetListItem: React.FC<AssetListItemProps> = ({ asset, isSelected, onSelect }) => {
-    const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        onSelect(asset.id, e.target.checked);
-    };
-
-    // Helper to format file size
-    function formatBytes(bytes: number, decimals = 1): string {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-    }
-
-    return (
-        // Use table row (tr) and table data (td) elements
-        <tr className={`hover:bg-gray-750 ${isSelected ? 'bg-blue-900/50' : ''} transition-colors duration-150`}>
-            {/* Select Checkbox Cell */}
-            <td className="px-4 py-2 whitespace-nowrap align-middle">
-                <input 
-                    type="checkbox" 
-                    checked={isSelected}
-                    onChange={handleCheckboxChange}
-                    className="form-checkbox h-4 w-4 text-blue-500 bg-gray-900 border-gray-600 rounded focus:ring-blue-500 focus:ring-offset-0 focus:ring-offset-gray-800 cursor-pointer"
-                    aria-label={`Select ${asset.fileName}`}
-                />
-            </td>
-            {/* Thumbnail Cell */}
-            <td className="px-4 py-2 align-middle">
-                <div className="w-10 h-10 bg-gray-700 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
-                    {asset.thumbnailPath ? (
-                        <img src={asset.thumbnailPath} alt={`Thumb ${asset.fileName}`} className="w-full h-full object-cover" loading="lazy"/>
-                    ) : (
-                        <FiEye size={20} className="text-gray-500" /> 
-                    )}
-                </div>
-            </td>
-            {/* Filename Cell */}
-            <td className="px-4 py-2 text-sm font-medium text-gray-200 align-middle max-w-xs truncate" title={asset.fileName}>
-                {asset.fileName}
-            </td>
-            {/* Year Cell */}
-            <td className="px-4 py-2 text-sm text-gray-400 align-middle">
-                {asset.year || 'N/A'}
-            </td>
-            {/* Advertiser Cell */}
-            <td className="px-4 py-2 text-sm text-gray-400 align-middle max-w-xs truncate" title={asset.advertiser || undefined}>
-                {asset.advertiser || 'N/A'}
-            </td>
-            {/* Niche Cell */}
-            <td className="px-4 py-2 text-sm text-gray-400 align-middle max-w-xs truncate" title={asset.niche || undefined}>
-                {asset.niche || 'N/A'}
-            </td>
-             {/* Shares Cell */}
-            <td className="px-4 py-2 text-sm text-gray-400 align-middle">
-                {(asset.shares !== null && asset.shares !== undefined) ? asset.shares : 'N/A'}
-            </td>
-            {/* Size Cell */}
-            <td className="px-4 py-2 text-sm text-gray-400 align-middle">
-                {formatBytes(asset.size)}
-            </td>
-            {/* Created Cell */}
-            <td className="px-4 py-2 text-sm text-gray-400 align-middle">
-                {new Date(asset.createdAt).toLocaleDateString()}
-            </td>
-             {/* Actions Cell */} 
-             <td className="px-4 py-2 text-sm text-gray-400 align-middle">
-                 <div className="flex items-center space-x-2">
-                     {/* Placeholder for inline actions - use actual buttons or links later */} 
-                     <button disabled className="p-1 rounded hover:bg-gray-700 opacity-50" title="Edit (Coming Soon)"><FiEdit size={14}/></button>
-                     <button disabled className="p-1 rounded hover:bg-gray-700 opacity-50" title="Delete (Use Batch)"><FiTrash2 size={14}/></button>
-                 </div>
-             </td>
-        </tr>
     );
 };
 
