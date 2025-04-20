@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import '../styles/app.css'
-import { useItems, type Item } from '../hooks/useItems'
+import { useAssets, type Asset, type UpdateAssetPayload } from '../hooks/useAssets'
 
 // Helper function to format file size
 function formatBytes(bytes: number, decimals = 2): string {
@@ -12,41 +12,66 @@ function formatBytes(bytes: number, decimals = 2): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
+// Helper function to format date string
+function formatDate(dateString: string): string {
+  try {
+    return new Date(dateString).toLocaleString();
+  } catch (e) {
+    return 'Invalid Date';
+  }
+}
+
 export default function App() {
-  const { items, loading, error, importFile, updateItem, deleteItem } = useItems()
-  const [currentItem, setCurrentItem] = useState<Item | null>(null)
-  const [editName, setEditName] = useState('')
-  const [editDescription, setEditDescription] = useState('')
+  const { assets, loading, error, createAsset, updateAsset, deleteAsset } = useAssets()
+  const [currentAsset, setCurrentAsset] = useState<Asset | null>(null)
+  const [editFileName, setEditFileName] = useState('')
+  const [editYear, setEditYear] = useState<string>('')
+  const [editAdvertiser, setEditAdvertiser] = useState('')
+  const [editNiche, setEditNiche] = useState('')
+  const [editAdspower, setEditAdspower] = useState('')
 
   const handleEditSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    if (!currentItem || !editName) return // Basic validation
+    if (!currentAsset) return
 
-    await updateItem({ id: currentItem.id, name: editName, description: editDescription })
+    const payload: UpdateAssetPayload = {
+      id: currentAsset.id,
+      updates: {
+        fileName: editFileName || currentAsset.fileName,
+        year: editYear ? parseInt(editYear, 10) : null,
+        advertiser: editAdvertiser || null,
+        niche: editNiche || null,
+        adspower: editAdspower || null,
+      }
+    };
+
+    await updateAsset(payload)
     
-    // Reset form
-    setCurrentItem(null)
-    setEditName('')
-    setEditDescription('')
+    handleCancelEdit()
   }
 
-  const handleEditClick = (item: Item) => {
-    setCurrentItem(item)
-    setEditName(item.name)
-    setEditDescription(item.description)
+  const handleEditClick = (asset: Asset) => {
+    setCurrentAsset(asset)
+    setEditFileName(asset.fileName)
+    setEditYear(asset.year?.toString() || '')
+    setEditAdvertiser(asset.advertiser || '')
+    setEditNiche(asset.niche || '')
+    setEditAdspower(asset.adspower || '')
   }
 
   const handleCancelEdit = () => {
-    setCurrentItem(null)
-    setEditName('')
-    setEditDescription('')
+    setCurrentAsset(null)
+    setEditFileName('')
+    setEditYear('')
+    setEditAdvertiser('')
+    setEditNiche('')
+    setEditAdspower('')
   }
 
   const handleDelete = async (id: number) => {
-    if (window.confirm('Are you sure you want to delete this file and its metadata?')) {
-      await deleteItem(id)
-      // If deleting the item currently being edited, reset form
-      if (currentItem && currentItem.id === id) {
+    if (window.confirm('Are you sure you want to delete this asset and its file?')) {
+      await deleteAsset(id)
+      if (currentAsset && currentAsset.id === id) {
         handleCancelEdit()
       }
     }
@@ -54,52 +79,83 @@ export default function App() {
 
   return (
     <div className="container mx-auto p-4 bg-gray-900 text-white min-h-screen">
-      <h1 className="text-2xl font-bold mb-4">File Vault</h1>
+      <h1 className="text-2xl font-bold mb-4">Ad Vault</h1>
 
       <div className="mb-6">
         <button
-          onClick={importFile}
+          onClick={createAsset}
           disabled={loading}
           className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white font-medium transition-colors duration-150 disabled:opacity-50"
         >
-          {loading ? 'Importing...' : 'Import File'}
+          {loading ? 'Processing...' : 'Import Asset'}
         </button>
       </div>
 
-      {currentItem && (
+      {currentAsset && (
         <form onSubmit={handleEditSubmit} className="mb-6 p-4 bg-gray-800 rounded shadow">
-          <h2 className="text-xl mb-3">Edit Metadata for: {currentItem.filePath}</h2>
+          <h2 className="text-xl mb-3">Edit Metadata for: {currentAsset.filePath}</h2>
           <div className="mb-3">
-            <label htmlFor="edit-name" className="block mb-1 text-sm font-medium">
-              Name:
-            </label>
+            <label htmlFor="edit-fileName" className="block mb-1 text-sm font-medium">File Name:</label>
             <input
-              id="edit-name"
+              id="edit-fileName"
               type="text"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
+              value={editFileName}
+              onChange={(e) => setEditFileName(e.target.value)}
               required
               className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
             />
           </div>
+          <div className="mb-3">
+            <label htmlFor="edit-year" className="block mb-1 text-sm font-medium">Year:</label>
+            <input
+              id="edit-year"
+              type="number"
+              value={editYear}
+              onChange={(e) => setEditYear(e.target.value)}
+              placeholder="e.g., 2023"
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+            />
+          </div>
+          <div className="mb-3">
+            <label htmlFor="edit-advertiser" className="block mb-1 text-sm font-medium">Advertiser:</label>
+            <input
+              id="edit-advertiser"
+              type="text"
+              value={editAdvertiser}
+              onChange={(e) => setEditAdvertiser(e.target.value)}
+              placeholder="e.g., Client Name"
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+            />
+          </div>
+          <div className="mb-3">
+            <label htmlFor="edit-niche" className="block mb-1 text-sm font-medium">Niche:</label>
+            <input
+              id="edit-niche"
+              type="text"
+              value={editNiche}
+              onChange={(e) => setEditNiche(e.target.value)}
+              placeholder="e.g., E-commerce"
+              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
+            />
+          </div>
           <div className="mb-4">
-            <label htmlFor="edit-description" className="block mb-1 text-sm font-medium">
-              Description:
-            </label>
-            <textarea
-              id="edit-description"
-              value={editDescription}
-              onChange={(e) => setEditDescription(e.target.value)}
-              rows={3}
+            <label htmlFor="edit-adspower" className="block mb-1 text-sm font-medium">Adspower Profile:</label>
+            <input
+              id="edit-adspower"
+              type="text"
+              value={editAdspower}
+              onChange={(e) => setEditAdspower(e.target.value)}
+              placeholder="e.g., Profile ID or Name"
               className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
             />
           </div>
           <div className="flex gap-2">
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white font-medium transition-colors duration-150"
+              disabled={loading}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white font-medium transition-colors duration-150 disabled:opacity-50"
             >
-              Update Metadata
+              {loading ? 'Updating...' : 'Update Metadata'}
             </button>
             <button
               type="button"
@@ -112,36 +168,43 @@ export default function App() {
         </form>
       )}
 
-      <h2 className="text-xl mb-3">Vaulted Files</h2>
-      {loading && items.length === 0 && <p>Loading files...</p>}
+      <h2 className="text-xl mb-3">Vaulted Assets</h2>
+      {loading && assets.length === 0 && <p>Loading assets...</p>}
       {error && <p className="text-red-500">Error: {error}</p>}
-      {!loading && items.length === 0 && (
-          <p className="text-gray-400">No files found. Click 'Import File' to add one.</p>
+      {!loading && assets.length === 0 && (
+          <p className="text-gray-400">No assets found. Click 'Import Asset' to add one.</p>
       )}
-      {items.length > 0 && (
+      {assets.length > 0 && (
         <ul className="space-y-3">
-          {items.map((item) => (
+          {assets.map((asset) => (
             <li
-              key={item.id}
-              className="flex items-center justify-between p-3 bg-gray-800 rounded shadow"
+              key={asset.id}
+              className="p-3 bg-gray-800 rounded shadow flex flex-col sm:flex-row sm:items-center sm:justify-between"
             >
-              <div className="flex-grow mr-4 overflow-hidden">
-                <p className="font-semibold truncate" title={item.name}>{item.name}</p>
-                <p className="text-sm text-gray-400 truncate" title={item.description || 'No description'}>{item.description || 'No description'}</p>
-                <p className="text-xs text-gray-500 mt-1">Path: {item.filePath}</p>
-                <p className="text-xs text-gray-500">Type: {item.mimeType} | Size: {formatBytes(item.size)}</p>
+              <div className="flex-grow mb-3 sm:mb-0 sm:mr-4 overflow-hidden">
+                <p className="font-semibold truncate text-lg" title={asset.fileName}>{asset.fileName}</p>
+                <div className="text-xs text-gray-400 mt-1 space-y-0.5">
+                  <p>Path: <span className="text-gray-300">{asset.filePath}</span></p>
+                  <p>Type: <span className="text-gray-300">{asset.mimeType}</span> | Size: <span className="text-gray-300">{formatBytes(asset.size)}</span></p>
+                  <p>Created: <span className="text-gray-300">{formatDate(asset.createdAt)}</span></p>
+                  {asset.year && <p>Year: <span className="text-gray-300">{asset.year}</span></p>}
+                  {asset.advertiser && <p>Advertiser: <span className="text-gray-300">{asset.advertiser}</span></p>}
+                  {asset.niche && <p>Niche: <span className="text-gray-300">{asset.niche}</span></p>}
+                  {asset.adspower && <p>Adspower: <span className="text-gray-300">{asset.adspower}</span></p>}
+                </div>
               </div>
-              <div className="flex-shrink-0 flex gap-2">
+              <div className="flex-shrink-0 flex gap-2 self-end sm:self-center">
                 <button
-                  onClick={() => handleEditClick(item)}
-                  disabled={currentItem?.id === item.id}
+                  onClick={() => handleEditClick(asset)}
+                  disabled={currentAsset?.id === asset.id || loading}
                   className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 rounded text-white text-sm font-medium transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Edit Meta
                 </button>
                 <button
-                  onClick={() => handleDelete(item.id)}
-                  className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-sm font-medium transition-colors duration-150"
+                  onClick={() => handleDelete(asset.id)}
+                  disabled={loading}
+                  className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-sm font-medium transition-colors duration-150 disabled:opacity-50"
                 >
                   Delete
                 </button>

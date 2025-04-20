@@ -1,12 +1,11 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
-import crypto from 'node:crypto'
 import mime from 'mime-types'
 import Database from 'better-sqlite3'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { createAppWindow } from './app'
-import { initializeDatabase, type Item } from '../../main/schema'
+import { initializeDatabase, type Asset } from '../../main/schema'
 
 // PRD Section 3: Configuration Update - Set vault root path to project's vault/ directory
 // Use path.join(__dirname, '..', '..', 'vault') to get path relative to project root
@@ -22,17 +21,21 @@ try {
 }
 
 // Initialize SQLite Database
-const dbPath = path.join(app.getPath('userData'), 'vaultDatabase.db') // Restore DB name
+const dbPath = path.join(app.getPath('userData'), 'vaultDatabase.db')
 const db = new Database(dbPath)
 initializeDatabase(db)
 
-// Prepare SQL statements for the updated schema
-// PRD Section 2: File Support - Updated SQL statements
-const getItemsStmt = db.prepare('SELECT id, name, description, filePath, mimeType, size FROM items');
-const importFileStmt = db.prepare('INSERT INTO items (name, description, filePath, mimeType, size) VALUES (?, ?, ?, ?, ?)');
-const updateItemStmt = db.prepare('UPDATE items SET name = ?, description = ? WHERE id = ?'); // Only update name/desc
-const getItemPathStmt = db.prepare('SELECT filePath FROM items WHERE id = ?'); // To get path for deletion
-const deleteItemStmt = db.prepare('DELETE FROM items WHERE id = ?');
+// PRD §4.2 Data Model - Prepare SQL statements for the assets and custom_fields tables
+const getAssetsStmt = db.prepare('SELECT id, fileName, filePath, mimeType, size, createdAt, year, advertiser, niche, adspower FROM assets');
+const createAssetStmt = db.prepare('INSERT INTO assets (fileName, filePath, mimeType, size, createdAt, year, advertiser, niche, adspower) VALUES (@fileName, @filePath, @mimeType, @size, @createdAt, @year, @advertiser, @niche, @adspower)');
+// Prepare statement for updating standard asset fields dynamically later
+const getAssetPathStmt = db.prepare('SELECT filePath FROM assets WHERE id = ?'); // To get path for deletion
+const deleteAssetStmt = db.prepare('DELETE FROM assets WHERE id = ?'); // Cascades to custom_fields
+
+// Statements for custom fields
+// const getCustomFieldsStmt = db.prepare('SELECT key, value FROM custom_fields WHERE assetId = ?'); // Removed as it's currently unused
+const upsertCustomFieldStmt = db.prepare('INSERT INTO custom_fields (assetId, key, value) VALUES (@assetId, @key, @value) ON CONFLICT(assetId, key) DO UPDATE SET value = excluded.value');
+const deleteCustomFieldStmt = db.prepare('DELETE FROM custom_fields WHERE assetId = ? AND key = ?');
 
 // --- Helper Function --- 
 // Generates a unique filename within the vault to avoid collisions
@@ -60,18 +63,18 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.electron')
 
   // --- IPC Handlers --- 
-  ipcMain.handle('get-items', async () => {
+  ipcMain.handle('get-assets', async () => {
     try {
-      // PRD Section 2: File Support - Fetch items with file metadata
-      return getItemsStmt.all() as Item[]
+      // Fetch assets based on the new schema
+      // Note: Custom fields are not fetched here for performance; fetch separately if needed per asset.
+      return getAssetsStmt.all() as Asset[]
     } catch (error) {
-      console.error('Failed to get items:', error)
+      console.error('Failed to get assets:', error)
       return []
     }
   })
 
-  // PRD Section 2: File Support - New handler for importing files
-  ipcMain.handle('import-file', async (_, sourcePath: string) => {
+  ipcMain.handle('create-asset', async (_, sourcePath: string) => {
     try {
       if (!fs.existsSync(sourcePath)) {
         console.error('Source file does not exist:', sourcePath);
@@ -89,62 +92,126 @@ app.whenReady().then(() => {
       // Get file metadata
       const stats = fs.statSync(vaultFilePath);
       const mimeType = mime.lookup(vaultFilePath) || 'application/octet-stream';
-      const originalName = path.basename(sourcePath);
+      const originalFileName = path.basename(sourcePath);
+      const createdAt = new Date().toISOString(); // PRD §4.2 - Add createdAt timestamp
 
-      // Insert metadata into DB
-      const info = importFileStmt.run(originalName, '', relativeVaultPath, mimeType, stats.size);
+      // Insert metadata into DB using the new statement
+      // PRD §4.2 Data Model - Populate new fields, set others to null initially
+      const info = createAssetStmt.run({
+        fileName: originalFileName,
+        filePath: relativeVaultPath,
+        mimeType: mimeType,
+        size: stats.size,
+        createdAt: createdAt,
+        year: null,
+        advertiser: null,
+        niche: null,
+        adspower: null
+      });
       
-      // Return the newly created item data
+      const newAssetId = info.lastInsertRowid;
+      if (typeof newAssetId !== 'number') {
+         throw new Error('Failed to get ID of newly created asset.');
+      }
+
+      // Return the newly created asset data
+      // Fetch the newly created asset to return all fields correctly
+      const newAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(newAssetId) as Asset;
+
       return {
         success: true,
-        item: {
-          id: info.lastInsertRowid,
-          name: originalName,
-          description: '',
-          filePath: relativeVaultPath, // Return relative path
-          mimeType: mimeType,
-          size: stats.size
-        } as Item
+        asset: newAsset
       };
     } catch (error) {
-      console.error('Failed to import file:', error);
-      let errorMessage = 'Unknown error during file import.';
+      console.error('Failed to create asset:', error);
+      let errorMessage = 'Unknown error during asset creation.';
       if (error instanceof Error) {
         errorMessage = error.message;
       }
       // Attempt to clean up potentially copied file if DB insert failed - more robust error handling could be added
-      return { success: false, error: `Failed to import file: ${errorMessage}` };
+      // Consider deleting vaultFilePath if it exists and the operation failed after copy
+      return { success: false, error: `Failed to create asset: ${errorMessage}` };
     }
   });
 
-  ipcMain.handle('update-item', async (_, item: Pick<Item, 'id' | 'name' | 'description'>) => { // Only update name/desc
-    try {
-      // PRD Section 2: File Support - Update limited fields (name, description)
-      const info = updateItemStmt.run(item.name, item.description, item.id)
-      return info.changes > 0 
-    } catch (error) {
-      console.error('Failed to update item:', error)
-      return false 
-    }
-  })
+  ipcMain.handle('update-asset', async (_, { id, updates }: { id: number; updates: Partial<Asset> & { customFields?: Record<string, string | null> } }) => {
+    const { customFields, ...standardUpdates } = updates;
+    const allowedStandardFields = ['fileName', 'year', 'advertiser', 'niche', 'adspower']; // Fields allowed for direct update in 'assets' table
 
-  ipcMain.handle('delete-item', async (_, id: number) => {
+    // Use a transaction for atomic update
+    const transaction = db.transaction((assetId: number, stdUpdates: Partial<Asset>, custFields?: Record<string, string | null>) => {
+        // 1. Update standard fields in the 'assets' table
+        const setClauses: string[] = [];
+        const params: any[] = [];
+        for (const key of allowedStandardFields) {
+            if (key in stdUpdates) {
+                setClauses.push(`${key} = ?`);
+                params.push(stdUpdates[key as keyof Asset]);
+            }
+        }
+
+        if (setClauses.length > 0) {
+            params.push(assetId);
+            const sql = `UPDATE assets SET ${setClauses.join(', ')} WHERE id = ?`;
+            const updateStmt = db.prepare(sql);
+            const info = updateStmt.run(...params);
+            if (info.changes === 0) {
+                 console.warn(`Asset with ID ${assetId} not found for update.`);
+                 // Optionally throw error to rollback transaction if asset must exist
+                 // throw new Error(`Asset with ID ${assetId} not found.`);
+            }
+        }
+
+        // 2. Update custom fields in the 'custom_fields' table
+        if (custFields) {
+            for (const [key, value] of Object.entries(custFields)) {
+                if (value === null || typeof value === 'undefined') {
+                    // Delete the custom field if value is null/undefined
+                    deleteCustomFieldStmt.run(assetId, key);
+                } else {
+                    // Insert or update the custom field
+                    upsertCustomFieldStmt.run({ assetId, key, value });
+                }
+            }
+        }
+        return true; // Indicate success within transaction
+    });
+
+    try {
+      const success = transaction(id, standardUpdates, customFields);
+      return success;
+    } catch (error) {
+      console.error(`Failed to update asset ID ${id}:`, error);
+      return false;
+    }
+  });
+
+  ipcMain.handle('delete-asset', async (_, id: number) => {
     let vaultFilePath = '';
     try {
       // 1. Get the relative file path from the database
-      const row = getItemPathStmt.get(id) as { filePath: string } | undefined;
+      const row = getAssetPathStmt.get(id) as { filePath: string } | undefined;
       if (!row || !row.filePath) {
-        console.warn(`No file path found for item ID ${id}. Deleting DB record only.`);
+        console.warn(`No file path found for asset ID ${id}. Attempting DB record deletion only.`);
       } else {
           // Construct full path using VAULT_ROOT and the relative path
           vaultFilePath = path.join(VAULT_ROOT, row.filePath); // Use path.join
       }
 
-      // 2. Delete the database record first
-      const dbInfo = deleteItemStmt.run(id)
+      // 2. Delete the database record (will cascade to custom_fields)
+      const dbInfo = deleteAssetStmt.run(id)
       if (dbInfo.changes === 0) {
-          console.warn(`No database record found for item ID ${id} during delete.`);
-          return true; // Assume already deleted or doesn't exist
+          console.warn(`No database record found for asset ID ${id} during delete.`);
+          // If no record found, maybe the file was already deleted or never existed correctly
+          // We still check if a file path was constructed and exists
+          if (vaultFilePath && fs.existsSync(vaultFilePath)) {
+             console.warn(`DB record for asset ID ${id} not found, but vault file exists: ${vaultFilePath}. Attempting file deletion.`);
+             // Proceed to file deletion attempt below
+          } else {
+             return true; // No DB record, no file path or file doesn't exist -> considered success
+          }
+      } else {
+          console.log(`Deleted asset record ID ${id} from database.`);
       }
 
       // 3. Delete the file from the vault if path was constructed and file exists
@@ -153,14 +220,18 @@ app.whenReady().then(() => {
               fs.unlinkSync(vaultFilePath);
               console.log(`Deleted file: ${vaultFilePath}`);
           } catch (fileError) {
-              console.error(`Failed to delete file ${vaultFilePath} for item ID ${id}:`, fileError);
+              console.error(`Failed to delete file ${vaultFilePath} for asset ID ${id} after deleting DB record:`, fileError);
               // Log error but still return true as DB record is deleted
+              return true; 
           }
+      } else if (vaultFilePath) {
+          console.warn(`Vault file not found at expected path: ${vaultFilePath} for asset ID ${id}.`);
       }
       
-      return true // Indicate success (DB record deleted)
+      return true // Indicate success (DB record deleted, file handled)
     } catch (error) {
-      console.error(`Failed to delete item ID ${id}:`, error)
+      console.error(`Failed to delete asset ID ${id}:`, error)
+      // If DB deletion failed, the file might still exist. More robust cleanup could be added.
       return false
     }
   })
