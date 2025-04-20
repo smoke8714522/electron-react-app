@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
 // Removed useAssets import as props are now passed down
-import { AssetWithThumbnail, BulkImportResult, UpdateAssetPayload } from '../hooks/useAssets'; 
+import { AssetWithThumbnail, BulkImportResult, UpdateAssetPayload, BatchUpdateResult } from '../hooks/useAssets'; 
 // Assuming react-icons is installed for a better UX
 import { 
     FiFilter, FiRefreshCw, FiGrid, FiList, FiChevronLeft, FiChevronRight, FiUploadCloud, 
     FiSearch, FiSliders, FiTag, FiTrash2, FiEdit, FiEye, FiPackage
 } from 'react-icons/fi';
+// Import the new modal component and types
+import BulkEditModal, { BulkUpdatePayload } from './BulkEditModal';
 
 // PRD §4.1 Library View: Define props for LibraryView
 interface LibraryViewProps {
@@ -16,6 +18,8 @@ interface LibraryViewProps {
     fetchAssets: () => Promise<void>;
     deleteAsset: (id: number) => Promise<boolean>;
     updateAsset: (payload: UpdateAssetPayload) => Promise<boolean>; // Add updateAsset prop if needed for inline editing
+    // PRD §4.1 Library View: Add bulkUpdateAssets prop
+    bulkUpdateAssets: (selectedIds: number[], updates: BulkUpdatePayload) => Promise<BatchUpdateResult>;
 }
 
 // PRD §4.1 Library View: Define the main library view component
@@ -26,7 +30,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({
     bulkImportAssets, 
     fetchAssets,
     deleteAsset,
-    // updateAsset // Include if inline editing from library is needed
+    bulkUpdateAssets, // Destructure the new prop
 }) => {
     // PRD §4.1 Library View: Use props instead of hook
     // const { assets, loading, error, bulkImportAssets, fetchAssets } = useAssets(); // Remove this line
@@ -36,6 +40,8 @@ const LibraryView: React.FC<LibraryViewProps> = ({
     // PRD §4.1 Library View: UI State - Default sidebar open, grid view
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+    // PRD §4.1 Library View: State for controlling the bulk edit modal
+    const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState<boolean>(false);
 
     // PRD §4.1 Library View: Toggle single asset selection
     const handleSelectAsset = (assetId: number, isSelected: boolean) => {
@@ -83,20 +89,64 @@ const LibraryView: React.FC<LibraryViewProps> = ({
     // PRD §4.1 Library View: Handle batch deletion
     const handleBatchDelete = async () => {
         const idsToDelete = Array.from(selectedAssetIds);
-        if (idsToDelete.length === 0 || !window.confirm(`Delete ${idsToDelete.length} selected assets?`)) {
+        if (idsToDelete.length === 0 || !window.confirm(`Are you sure you want to delete ${idsToDelete.length} selected asset(s)? This action cannot be undone.`)) {
             return;
         }
         console.log('Attempting to delete assets:', idsToDelete);
+        // Display loading state? (Consider adding a loading state for batch actions)
+        let deletedCount = 0;
+        const errors: { id: number, error: string }[] = [];
         try {
-            // Perform deletions sequentially or adapt backend for batch delete
+            // Perform deletions sequentially. Consider backend endpoint for true batch deletion.
             for (const id of idsToDelete) {
-                await deleteAsset(id);
+                const success = await deleteAsset(id); // Reuse single delete logic
+                if (success) {
+                    deletedCount++;
+                } else {
+                    errors.push({ id, error: 'Deletion failed via hook.'});
+                }
             }
             setSelectedAssetIds(new Set()); // Clear selection after deletion
             await fetchAssets(); // Refresh list to reflect deletions
-        } catch (err) {
+            alert(`${deletedCount} asset(s) deleted successfully. ${errors.length > 0 ? `${errors.length} failed.` : ''}`);
+        } catch (err: any) {
             console.error('Error during batch delete:', err);
-            // Show error feedback to user
+            alert(`An error occurred during batch deletion: ${err.message || 'Unknown error'}`);
+            // Optionally fetchAssets again even on error to ensure UI consistency
+            await fetchAssets(); 
+        }
+    };
+
+    // PRD §4.1 Library View: Handle opening the bulk edit modal
+    const handleOpenBulkEditModal = () => {
+        if (selectedAssetIds.size > 0) {
+            setIsBulkEditModalOpen(true);
+        }
+    };
+    
+    // PRD §4.1 Library View: Handle saving from the bulk edit modal
+    const handleBulkUpdateSave = async (updates: BulkUpdatePayload) => {
+        const idsToUpdate = Array.from(selectedAssetIds);
+        if (idsToUpdate.length === 0) return; // Should not happen if modal opened
+        
+        try {
+            const result = await bulkUpdateAssets(idsToUpdate, updates);
+            console.log('Bulk update result:', result);
+            if (result.success) {
+                alert(`Successfully updated ${result.updatedCount} asset(s).`);
+            } else {
+                alert(`Bulk update completed with ${result.errors.length} error(s). Updated ${result.updatedCount} asset(s). Check console for details.`);
+                // Optionally log detailed errors
+                result.errors.forEach(e => console.error(`Update Error (ID: ${e.id}): ${e.error}`));
+            }
+            setSelectedAssetIds(new Set()); // Clear selection after update
+            setIsBulkEditModalOpen(false); // Close modal handled by modal itself on success, but ensure state sync
+            // fetchAssets() is called within bulkUpdateAssets hook, no need to call again here.
+        } catch (err: any) {
+            console.error('Failed to execute bulk update:', err);
+            alert(`An unexpected error occurred during bulk update: ${err.message || 'Unknown error'}`);
+            // Keep modal open? Maybe close it and rely on error message.
+            // setIsBulkEditModalOpen(false); // Decide on desired behavior
         }
     };
 
@@ -199,27 +249,32 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                 {/* PRD §4.1 Library View: Sticky Top Action Bar */} 
                 <div className="flex items-center justify-between p-3 border-b border-gray-700 bg-gray-800 flex-shrink-0 sticky top-0 z-10">
                     {/* Left Side: Batch Actions (visible when items selected) */} 
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-3 flex-grow mr-4 min-w-0">
                          {selectedAssetIds.size > 0 ? (
                              <> 
-                                 <span className="text-sm text-gray-400">{selectedAssetIds.size} selected</span>
+                                 <span className="text-sm text-gray-300 font-medium bg-gray-700 px-2.5 py-1 rounded">
+                                     {selectedAssetIds.size} selected
+                                 </span>
+                                 {/* PRD §4.1 Library View: Batch Edit Button */}
+                                 <button 
+                                    onClick={handleOpenBulkEditModal}
+                                    className="flex items-center px-3 py-1 bg-yellow-600 hover:bg-yellow-700 rounded text-white text-xs font-medium transition-colors duration-150"
+                                    title="Edit Metadata for Selected Assets"
+                                >
+                                    <FiEdit className="mr-1" size={14}/> Edit Metadata
+                                </button>
+                                {/* PRD §4.1 Library View: Batch Delete Button */}
                                  <button 
                                     onClick={handleBatchDelete}
-                                    className="flex items-center px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-xs font-medium transition-colors duration-150"
+                                    className="flex items-center px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-xs font-medium transition-colors duration-150"
                                     title="Delete Selected Assets"
                                 >
-                                    <FiTrash2 className="mr-1" size={14}/> Delete
+                                    <FiTrash2 className="mr-1" size={14}/> Delete Selected
                                 </button>
-                                {/* Add other batch actions like Edit Meta, Add Tags here */} 
-                                <button 
-                                    disabled 
-                                    className="flex items-center px-2 py-1 bg-yellow-600 rounded text-white text-xs font-medium opacity-50 cursor-not-allowed"
-                                    title="Batch Edit Metadata (Coming Soon)"
-                                >
-                                    <FiEdit className="mr-1" size={14}/> Edit Meta
-                                </button>
+                                {/* Add other batch actions here if needed */}
                              </> 
                          ) : (
+                             // Optionally show a placeholder or leave empty when nothing is selected
                              <span className="text-sm text-gray-500 italic">Select assets for batch actions</span>
                          )}
                     </div>
@@ -246,17 +301,17 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                         <div className="flex items-center text-sm">
                              <button 
                                 onClick={() => setViewMode('grid')}
-                                className={`flex items-center justify-center px-2.5 py-1 border border-r-0 border-gray-600 rounded-l ${viewMode === 'grid' ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'}`}
+                                className={`flex items-center justify-center px-2.5 py-1.5 h-8 border border-r-0 border-gray-600 rounded-l ${viewMode === 'grid' ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'}`}
                                 title="Grid View"
                             >
-                                <FiGrid size={16}/>
+                                <FiGrid size={16} />
                             </button>
-                             <button 
+                            <button 
                                 onClick={() => setViewMode('list')}
-                                className={`flex items-center justify-center px-2.5 py-1 border border-gray-600 rounded-r ${viewMode === 'list' ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'}`}
+                                className={`flex items-center justify-center px-2.5 py-1.5 h-8 border border-gray-600 rounded-r ${viewMode === 'list' ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'}`}
                                 title="List View"
                             >
-                                <FiList size={16}/>
+                                <FiList size={16} />
                             </button>
                         </div>
                     </div>
@@ -300,6 +355,15 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                     )}
                 </div>
             </main>
+
+            {/* PRD §4.1 Library View: Bulk Edit Modal */} 
+            <BulkEditModal 
+                isOpen={isBulkEditModalOpen} 
+                onClose={() => setIsBulkEditModalOpen(false)} 
+                onSave={handleBulkUpdateSave} 
+                selectedCount={selectedAssetIds.size}
+            />
+
         </div>
     );
 };

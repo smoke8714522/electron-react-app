@@ -17,7 +17,11 @@ export interface Asset {
   // They need to be fetched/managed separately if displayed/edited
 }
 
-// PRD §4.1 Library View - Extend Asset with optional thumbnail path for UI
+// PRD §4.1 Library View: Define the fields available for bulk editing
+export type EditableAssetFields = Pick<Asset, 'year' | 'advertiser' | 'niche' | 'adspower'>;
+export type BulkUpdatePayload = Partial<EditableAssetFields>;
+
+// PRD §4.1 Library View: Extend Asset with optional thumbnail path for UI
 export interface AssetWithThumbnail extends Asset {
   thumbnailPath?: string | null;
 }
@@ -37,12 +41,19 @@ export interface BulkImportResult {
     errors: { file: string, error: string }[];
 }
 
+// PRD §4.1 Library View: Result type for batch update operation
+export interface BatchUpdateResult {
+    success: boolean;
+    updatedCount: number;
+    errors: { id: number, error: string }[];
+}
+
 // Argument type for update-asset IPC call
 export type UpdateAssetPayload = {
   id: number;
-  updates: Partial<Omit<Asset, 'id' | 'filePath' | 'mimeType' | 'size' | 'createdAt'>> & { // Allow updating specific fields
-    customFields?: Record<string, string | null>; // Allow sending custom fields updates/deletions
-  };
+  // Allow updates for any subset of Asset fields, excluding read-only ones
+  // Includes custom fields logic if implemented
+  updates: Partial<Omit<Asset, 'id' | 'filePath' | 'mimeType' | 'size' | 'createdAt'> & { customFields?: Record<string, string | null> }>;
 };
 
 // Define the API structure exposed by the preload script more specifically
@@ -193,6 +204,72 @@ export function useAssets() {
     return success;
   }, [fetchAssets]); // Removed setLoading, setError
 
+  // PRD §4.1 Library View: Add bulk update function
+  const bulkUpdateAssets = useCallback(async (selectedIds: number[], updates: BulkUpdatePayload): Promise<BatchUpdateResult> => {
+      setLoading(true);
+      setError(null);
+      const results: { success: boolean, id: number, error?: string }[] = [];
+      let successCount = 0;
+      const errors: { id: number, error: string }[] = [];
+
+      // Sequentially update each selected asset
+      for (const id of selectedIds) {
+          try {
+              // Prepare payload for single asset update
+              const payload: UpdateAssetPayload = { 
+                  id,
+                  // Ensure we only pass allowed fields for update
+                  updates: {
+                    ...(updates.year !== undefined && { year: updates.year }),
+                    ...(updates.advertiser !== undefined && { advertiser: updates.advertiser }),
+                    ...(updates.niche !== undefined && { niche: updates.niche }),
+                    ...(updates.adspower !== undefined && { adspower: updates.adspower }),
+                    // Note: Does not handle custom fields in this bulk update
+                  }
+              };
+              const success = await window.api.invoke('update-asset', payload);
+              results.push({ success, id });
+              if (success) {
+                  successCount++;
+              } else {
+                 // Assume if success is false, an error occurred (though invoke might not throw)
+                 // The backend should ideally return an error message
+                 const errorMsg = `Update failed for asset ID ${id}.`;
+                 console.error(errorMsg);
+                 errors.push({ id, error: 'Update operation returned false.' });
+              }
+          } catch (err: any) {
+              console.error(`Failed to update asset ID ${id}:`, err);
+              const errorMsg = err.message || 'Unknown error during update';
+              results.push({ success: false, id, error: errorMsg });
+              errors.push({ id, error: errorMsg });
+          }
+      }
+
+      // Refresh assets list if at least one update was attempted (even if it failed, to ensure UI consistency)
+      if (selectedIds.length > 0) {
+        await fetchAssets();
+      }
+      
+      setLoading(false);
+      // Set error state if there were any failures
+      if (errors.length > 0) {
+          setError(`Bulk update completed with ${errors.length} error(s). See console for details.`);
+      }
+
+      return { success: errors.length === 0, updatedCount: successCount, errors };
+  }, [fetchAssets]);
+
   // Expose bulkImportAssets along with other actions
-  return { assets, loading, error, fetchAssets, createAsset, bulkImportAssets, updateAsset, deleteAsset }
+  return { 
+      assets, 
+      loading, 
+      error, 
+      fetchAssets, 
+      createAsset, 
+      bulkImportAssets, 
+      updateAsset, 
+      deleteAsset,
+      bulkUpdateAssets // Expose the new function
+  }
 } 

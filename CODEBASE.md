@@ -9,7 +9,7 @@ The project follows a structure separating the Electron main process, the React 
 ```
 /
 ├── app/                  # React Renderer Source Code
-│   ├── components/       # React Components (e.g., App.tsx, LibraryView.tsx)
+│   ├── components/       # React Components (e.g., App.tsx, LibraryView.tsx, BulkEditModal.tsx)
 │   ├── hooks/            # React Hooks (e.g., useAssets.ts)
 │   ├── services/         # Renderer-specific services (if any)
 │   ├── styles/           # CSS Styles (app.css, tailwind.css)
@@ -77,22 +77,37 @@ The project follows a structure separating the Electron main process, the React 
     *   Features a two-pane layout implemented with Flexbox (PRD §4.1 Library View):
         *   **Collapsible Left Sidebar** (`<aside>`): Width transitions between `w-64` (expanded) and `w-16` (icon-only collapsed state). Contains filter controls: Search input, Adspower slider (placeholder), Tag checkboxes (placeholder). Sidebar content adapts or hides when collapsed. Toggle button in the sidebar header.
         *   **Main Content Area** (`<main>`): Takes remaining width (`flex-1`). Contains a sticky top toolbar and the scrollable asset display area.
-            *   **Sticky Top Toolbar**: Contains batch action controls (e.g., selected count, batch delete button), main action buttons ("Bulk Import", "Refresh"), and a "Grid/List" view toggle. Toolbar remains visible when scrolling assets.
+            *   **Sticky Top Toolbar**: Contains main action buttons ("Bulk Import", "Refresh"), a "Grid/List" view toggle, and **conditional batch action controls** that appear when assets are selected (`selectedCount`, "Edit Metadata" button, "Delete Selected" button). Toolbar remains visible when scrolling assets.
             *   **Asset Display Area**: Scrollable area (`overflow-y-auto`). Displays assets using either `AssetCard` components in a responsive grid (default) or `AssetListItem` components (placeholder list view) based on the view toggle state.
     *   `AssetCard`: Displays thumbnail, key metadata (`fileName`, `year`, `advertiser`, `niche`, `adspower`), and includes a checkbox for multi-select. Clicking the card toggles selection.
     *   `AssetListItem` (Placeholder): Basic structure for list view rows, including thumbnail, key metadata columns, and file info.
-    *   Implements multi-select functionality via checkboxes on `AssetCard` / `AssetListItem`. Selected count and batch actions appear in the main content toolbar.
+    *   Implements multi-select functionality via checkboxes on `AssetCard` / `AssetListItem`. Selected count and batch actions ("Edit Metadata", "Delete Selected") appear in the main content toolbar.
+    *   Triggers `BulkEditModal` when the "Edit Metadata" batch action is clicked.
+*   **Bulk Edit Modal Component**: `app/components/BulkEditModal.tsx` (New)
+    *   Modal dialog for batch editing metadata of selected assets (PRD §4.1 Library View).
+    *   Displays fields for `year`, `advertiser`, `niche`, `adspower`.
+    *   Each field has an associated "Apply" checkbox; only checked fields are included in the update.
+    *   Props:
+        *   `isOpen: boolean`: Controls modal visibility.
+        *   `onClose: () => void`: Callback to close the modal.
+        *   `onSave: (updates: BulkUpdatePayload) => Promise<void>`: Callback triggered on save, passing an object with only the checked fields and their values.
+        *   `selectedCount: number`: Displays the number of assets being edited.
+    *   Styled using Tailwind CSS.
 *   **React State Management (Assets)**: `app/hooks/useAssets.ts`
     *   Custom hook (`useAssets`) managing the list of assets (`AssetWithThumbnail[]`).
     *   Provides `fetchAssets`, `bulkImportAssets`, `updateAsset`, `deleteAsset` functions which invoke corresponding IPC handlers.
-    *   Defines the `AssetWithThumbnail` type locally.
-    *   Defines specific types for IPC arguments/return values (e.g., `BulkImportResult`).
+    *   **New**: Provides `bulkUpdateAssets(selectedIds: number[], updates: BulkUpdatePayload): Promise<BatchUpdateResult>` function.
+        *   Iterates through `selectedIds` and calls the `update-asset` IPC handler for each.
+        *   `BulkUpdatePayload` type defines editable fields (`year`, `advertiser`, `niche`, `adspower`).
+        *   `BatchUpdateResult` type reports success, count, and any errors.
+        *   Refreshes the asset list via `fetchAssets` after completion.
+    *   Defines the `AssetWithThumbnail`, `BulkImportResult`, `UpdateAssetPayload`, `BulkUpdatePayload`, `BatchUpdateResult` types locally.
 
 ## Implementation Notes
 
 *   **Asset Creation/Import**: Initiated via `createAsset` (single file dialog in Dashboard view) or `bulkImportAssets` (multi-file dialog via button in `LibraryView` toolbar) in `useAssets`. Main process handles file copy, metadata, DB insert, and async thumbnail generation.
-*   **Asset Update**: The `update-asset` handler (used by Dashboard edit form) allows modifying standard fields and custom fields.
-*   **Asset Deletion**: Single asset deletion via `deleteAsset` hook (used by Dashboard view). Batch deletion placeholder implemented in `LibraryView` toolbar, requires backend support or sequential frontend calls.
+*   **Asset Update**: The `update-asset` handler (used by Dashboard edit form and now `bulkUpdateAssets`) allows modifying standard fields and custom fields.
+*   **Asset Deletion**: Single asset deletion via `deleteAsset` hook. Batch deletion implemented in `LibraryView` toolbar by iterating calls to `deleteAsset`.
 *   **File Storage**: Files stored in `/vault/`, DB stores relative `filePath`.
 *   **Previews/Thumbnails**: Handled by `ThumbnailService`, cached in user data. `get-assets` returns `thumbnailPath`. `LibraryView` displays these in `AssetCard` and `AssetListItem`.
 *   **Database**: `better-sqlite3`, `vaultDatabase.db` in user data path.
