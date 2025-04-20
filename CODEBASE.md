@@ -12,7 +12,7 @@ The project follows a structure separating the Electron main process, the React 
 │   ├── components/       # React Components (e.g., App.tsx, LibraryView.tsx)
 │   ├── hooks/            # React Hooks (e.g., useAssets.ts)
 │   ├── services/         # Renderer-specific services (if any)
-│   ├── styles/           # CSS Styles
+│   ├── styles/           # CSS Styles (app.css, tailwind.css)
 │   └── renderer.tsx      # React entry point
 │   └── index.d.ts        # Type definitions for renderer
 ├── lib/
@@ -38,6 +38,10 @@ The project follows a structure separating the Electron main process, the React 
 
 ## Key Component Locations
 
+*   **Electron Main App Logic**: `lib/main/app.ts`
+    *   Handles `BrowserWindow` creation.
+    *   Configured to create a frameless, resizable window (`frame: false`, `titleBarStyle: 'hidden'`) to allow for a custom UI (PRD §5 Non-Functional Requirements).
+    *   Window starts maximized (`mainWindow.maximize()`) to provide a full-window experience (PRD §5 Non-Functional Requirements).
 *   **Electron Main Entry**: `lib/main/main.ts`
     *   Handles app lifecycle events.
     *   Initializes the SQLite database (`vaultDatabase.db` in user data path).
@@ -62,28 +66,37 @@ The project follows a structure separating the Electron main process, the React 
 *   **Electron Preload Script**: `lib/preload/preload.ts` (with helpers in `lib/preload/api.ts`)
     *   Exposes a generic `api` object with an `invoke` method.
 *   **React App Entry**: `app/renderer.tsx`
-    *   Renders the main React component (`App`). Likely needs modification to render `LibraryView`.
+    *   Renders the main React component (`App`).
 *   **Main React Component**: `app/components/App.tsx`
-    *   Previously the top-level UI. Might need changes to incorporate `LibraryView`.
-*   **Main Library View Component**: `app/components/LibraryView.tsx` (New)
-    *   Displays assets in a grid view using `AssetCard` components.
-    *   Shows thumbnails (via `thumbnailPath` from `useAssets`) and key metadata (`fileName`, `year`, `advertiser`, `niche`, `adspower`).
-    *   Implements multi-select functionality.
-    *   Provides basic search (name, advertiser, niche) and filtering (adspower) capabilities.
-    *   Includes a button to trigger the `bulkImportAssets` flow.
+    *   Top-level UI component using Tailwind CSS.
+    *   Implements a simple top navigation bar ("Ad Vault" title + tabs) to switch between views ('Dashboard' and 'Library'). Navigation is edge-to-edge.
+    *   Conditionally renders either the original basic asset list/edit view (as 'Dashboard') or the `LibraryView` based on selected tab state.
+    *   Root element uses Flexbox (`h-screen w-screen flex flex-col`) to ensure the layout fills the entire window edge-to-edge without extra padding (PRD §5 Non-Functional Requirements). Main content area handles scrolling.
+*   **Main Library View Component**: `app/components/LibraryView.tsx` (Refactored)
+    *   Main view for browsing and managing assets, styled with Tailwind CSS.
+    *   Features a two-pane layout implemented with Flexbox (PRD §4.1 Library View):
+        *   **Collapsible Left Sidebar** (`<aside>`): Width transitions between `w-64` (expanded) and `w-16` (icon-only collapsed state). Contains filter controls: Search input, Adspower slider (placeholder), Tag checkboxes (placeholder). Sidebar content adapts or hides when collapsed. Toggle button in the sidebar header.
+        *   **Main Content Area** (`<main>`): Takes remaining width (`flex-1`). Contains a sticky top toolbar and the scrollable asset display area.
+            *   **Sticky Top Toolbar**: Contains batch action controls (e.g., selected count, batch delete button), main action buttons ("Bulk Import", "Refresh"), and a "Grid/List" view toggle. Toolbar remains visible when scrolling assets.
+            *   **Asset Display Area**: Scrollable area (`overflow-y-auto`). Displays assets using either `AssetCard` components in a responsive grid (default) or `AssetListItem` components (placeholder list view) based on the view toggle state.
+    *   `AssetCard`: Displays thumbnail, key metadata (`fileName`, `year`, `advertiser`, `niche`, `adspower`), and includes a checkbox for multi-select. Clicking the card toggles selection.
+    *   `AssetListItem` (Placeholder): Basic structure for list view rows, including thumbnail, key metadata columns, and file info.
+    *   Implements multi-select functionality via checkboxes on `AssetCard` / `AssetListItem`. Selected count and batch actions appear in the main content toolbar.
 *   **React State Management (Assets)**: `app/hooks/useAssets.ts`
     *   Custom hook (`useAssets`) managing the list of assets (`AssetWithThumbnail[]`).
+    *   Provides `fetchAssets`, `bulkImportAssets`, `updateAsset`, `deleteAsset` functions which invoke corresponding IPC handlers.
     *   Defines the `AssetWithThumbnail` type locally.
     *   Defines specific types for IPC arguments/return values (e.g., `BulkImportResult`).
-    *   Handles fetching (`get-assets`), creating (`create-asset`), bulk importing (`bulk-import-assets`), updating (`update-asset`), and deleting (`delete-asset`) assets by calling the corresponding IPC handlers via `window.api.invoke`. CRUD operations re-fetch the asset list on success.
 
 ## Implementation Notes
 
-*   **Asset Creation/Import**: Initiated via `createAsset` (single file dialog) or `bulkImportAssets` (multi-file dialog) in `useAssets`, called from the UI (e.g., `LibraryView`). The main process handles file copy (to `/vault/`), metadata extraction (`createdAt`, size, MIME), database insertion (`assets` table), and triggers background thumbnail generation via `ThumbnailService`. Initial values for `year`, `advertiser`, etc., are `null`. Relative file paths stored in the DB use `path.win32` separators.
-*   **Asset Update**: The `update-asset` handler allows modifying standard fields and custom fields.
-*   **File Storage**: Files are stored directly in the configured vault root (`/vault/` directory within the project) using unique hash-based names. The database (`assets` table) stores the relative `filePath` (using `\` separators) to the file within this vault directory. The `vault/` directory itself should be ignored by Git.
-*   **Previews/Thumbnails**: Handled by `lib/main/ThumbnailService.ts`. Generates `.jpg` thumbnails for images, videos (requires `ffmpeg`), and PDFs (requires `pdftocairo` or similar Poppler tool) and caches them in the user data directory. The `get-assets` IPC call returns a `file://` URL to the cached thumbnail if available. `LibraryView` displays these thumbnails.
-*   **Database**: `better-sqlite3` is used. The database file (`vaultDatabase.db`) is stored in the Electron application's user data directory. Schema includes `assets` and `custom_fields` tables.
-*   **Path Handling**: `path.win32.join` is used specifically for creating the relative `filePath` stored in the database, as requested. `path.join` is used for most other internal path operations (e.g., constructing absolute paths for file system access, cache paths).
-*   **Error Handling**: Basic error handling in IPC handlers and React hooks. `bulk-import-assets` returns a list of errors if any files fail. Thumbnail generation errors are logged to the console.
-*   **Dependencies**: Key dependencies include `electron`, `react`, `better-sqlite3`, `@electron-toolkit/utils`, `mime-types`. Thumbnail generation relies on external tools (`ffmpeg`, `pdftocairo`) being available in the system's PATH.
+*   **Asset Creation/Import**: Initiated via `createAsset` (single file dialog in Dashboard view) or `bulkImportAssets` (multi-file dialog via button in `LibraryView` toolbar) in `useAssets`. Main process handles file copy, metadata, DB insert, and async thumbnail generation.
+*   **Asset Update**: The `update-asset` handler (used by Dashboard edit form) allows modifying standard fields and custom fields.
+*   **Asset Deletion**: Single asset deletion via `deleteAsset` hook (used by Dashboard view). Batch deletion placeholder implemented in `LibraryView` toolbar, requires backend support or sequential frontend calls.
+*   **File Storage**: Files stored in `/vault/`, DB stores relative `filePath`.
+*   **Previews/Thumbnails**: Handled by `ThumbnailService`, cached in user data. `get-assets` returns `thumbnailPath`. `LibraryView` displays these in `AssetCard` and `AssetListItem`.
+*   **Database**: `better-sqlite3`, `vaultDatabase.db` in user data path.
+*   **Path Handling**: `path.win32.join` for DB paths, `path.join` otherwise.
+*   **UI Layout**: `App.tsx` uses `flex flex-col h-screen w-screen` for full window layout. `LibraryView.tsx` uses `flex` for its two-pane layout, with the sidebar width controlled by state and the main content area managing its own scrolling. Tailwind CSS used throughout.
+*   **Error Handling**: Basic error handling in IPC/hooks. `bulk-import-assets` returns errors. Thumbnail errors logged.
+*   **Dependencies**: `electron`, `react`, `better-sqlite3`, `@electron-toolkit/utils`, `mime-types`, `react-icons` (assumed for icons). External tools (`ffmpeg`, `pdftocairo`) needed for some thumbnails.

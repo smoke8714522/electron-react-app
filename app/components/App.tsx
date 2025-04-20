@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import '../styles/app.css'
-import { useAssets, type Asset, type UpdateAssetPayload } from '../hooks/useAssets'
+import { useAssets, type Asset, type UpdateAssetPayload, AssetWithThumbnail } from '../hooks/useAssets'
+import LibraryView from './LibraryView'
 
 // Helper function to format file size
 function formatBytes(bytes: number, decimals = 2): string {
@@ -22,7 +23,8 @@ function formatDate(dateString: string): string {
 }
 
 export default function App() {
-  const { assets, loading, error, createAsset, updateAsset, deleteAsset } = useAssets()
+  const [activeView, setActiveView] = useState<'dashboard' | 'library'>('library')
+  const { assets, loading, error, createAsset, updateAsset, deleteAsset, bulkImportAssets, fetchAssets } = useAssets()
   const [currentAsset, setCurrentAsset] = useState<Asset | null>(null)
   const [editFileName, setEditFileName] = useState('')
   const [editYear, setEditYear] = useState<string>('')
@@ -77,10 +79,9 @@ export default function App() {
     }
   }
 
-  return (
-    <div className="container mx-auto p-4 bg-gray-900 text-white min-h-screen">
-      <h1 className="text-2xl font-bold mb-4">Ad Vault</h1>
-
+  // Component for the original Dashboard view content
+  const DashboardView = () => (
+    <div className="p-4">
       <div className="mb-6">
         <button
           onClick={createAsset}
@@ -168,7 +169,7 @@ export default function App() {
         </form>
       )}
 
-      <h2 className="text-xl mb-3">Vaulted Assets</h2>
+      <h2 className="text-xl mb-3">Vaulted Assets (Dashboard View)</h2>
       {loading && assets.length === 0 && <p>Loading assets...</p>}
       {error && <p className="text-red-500">Error: {error}</p>}
       {!loading && assets.length === 0 && (
@@ -195,7 +196,7 @@ export default function App() {
               </div>
               <div className="flex-shrink-0 flex gap-2 self-end sm:self-center">
                 <button
-                  onClick={() => handleEditClick(asset)}
+                  onClick={() => handleEditClick(asset as Asset)}
                   disabled={currentAsset?.id === asset.id || loading}
                   className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 rounded text-white text-sm font-medium transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -213,6 +214,45 @@ export default function App() {
           ))}
         </ul>
       )}
+    </div>
+  )
+
+  return (
+    <div className="flex flex-col h-screen w-screen bg-gray-900 text-white overflow-hidden">
+      <nav className="bg-gray-800 shadow-md flex-shrink-0">
+        <div className="w-full px-4 py-2 flex items-center justify-between">
+          <h1 className="text-lg font-bold">Ad Vault</h1>
+          <div className="space-x-4">
+            <button
+              onClick={() => setActiveView('dashboard')}
+              className={`px-3 py-1 rounded transition-colors duration-150 ${activeView === 'dashboard' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+            >
+              Dashboard
+            </button>
+            <button
+              onClick={() => setActiveView('library')}
+              className={`px-3 py-1 rounded transition-colors duration-150 ${activeView === 'library' ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+            >
+              Library
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <main className="flex-grow">
+        {activeView === 'dashboard' && <DashboardView />}
+        {activeView === 'library' && 
+          <LibraryView 
+            assets={assets as AssetWithThumbnail[]}
+            loading={loading}
+            error={error}
+            bulkImportAssets={bulkImportAssets}
+            fetchAssets={fetchAssets}
+            deleteAsset={deleteAsset}
+            updateAsset={updateAsset}
+          />
+        }
+      </main>
     </div>
   )
 }

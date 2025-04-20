@@ -5,16 +5,16 @@ import appIcon from '@/resources/build/icon.png?asset'
 
 export function createAppWindow(): void {
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
     show: false,
     backgroundColor: '#1c1c1c',
     icon: appIcon,
     frame: false,
-    titleBarStyle: 'hiddenInset',
-    title: 'Electron React App',
-    maximizable: false,
-    resizable: false,
+    titleBarStyle: 'hidden',
+    title: 'Ad-Vault',
+    maximizable: true,
+    resizable: true,
+    minWidth: 800,
+    minHeight: 600,
     webPreferences: {
       preload: join(__dirname, '../preload/preload.js'),
       sandbox: false,
@@ -26,6 +26,7 @@ export function createAppWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+    mainWindow.maximize()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
