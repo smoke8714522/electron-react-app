@@ -6,6 +6,9 @@ export interface Item {
   id: number
   name: string
   description: string
+  filePath: string
+  mimeType: string
+  size: number
 }
 
 // Augment the Window interface to include the exposed API
@@ -46,44 +49,57 @@ export function useItems() {
     fetchItems()
   }, [fetchItems])
 
-  const createItem = useCallback(
-    async (newItemData: { name: string; description: string }) => {
-      try {
-        // Use window.api.invoke
-        const newItem = await window.api.invoke('create-item', newItemData)
-        if (newItem) {
-          setItems((prevItems) => [...prevItems, newItem])
-          return newItem // Return the created item on success
-        } else {
-          throw new Error('Failed to create item on backend.')
-        }
-      } catch (err) {
-        console.error('Failed to create item:', err)
-        setError('Failed to create item.')
-        return null // Indicate failure
-      }
-    },
-    []
-  )
-
-  const updateItem = useCallback(async (updatedItem: Item) => {
+  const importFile = useCallback(async () => {
+    setError(null); // Clear previous errors
     try {
-      // Use window.api.invoke
-      const success = await window.api.invoke('update-item', updatedItem)
-      if (success) {
-        setItems((prevItems) =>
-          prevItems.map((item) => (item.id === updatedItem.id ? updatedItem : item))
-        )
-        return true // Indicate success
+      // 1. Ask main process to open file dialog
+      const sourcePath = await window.api.invoke('open-file-dialog');
+      if (!sourcePath) {
+        console.log('File selection canceled.');
+        return null; // User canceled selection
+      }
+
+      // 2. Ask main process to import the selected file
+      setLoading(true); // Show loading state during import
+      const result = await window.api.invoke('import-file', sourcePath);
+      setLoading(false);
+
+      if (result.success && result.item) {
+        // Add the new item to the state
+        setItems((prevItems) => [...prevItems, result.item]);
+        return result.item; // Return the newly added item
       } else {
-        throw new Error('Failed to update item on backend.')
+        console.error('Import failed:', result.error);
+        setError(`Import failed: ${result.error}`);
+        return null; // Indicate failure
       }
     } catch (err) {
-      console.error('Failed to update item:', err)
-      setError('Failed to update item.')
-      return false // Indicate failure
+      console.error('Failed to import file:', err);
+      setError('Failed to import file.');
+      setLoading(false); // Ensure loading state is reset on error
+      return null; // Indicate failure
     }
-  }, [])
+  }, []);
+
+  const updateItem = useCallback(async (itemData: Pick<Item, 'id' | 'name' | 'description'>) => {
+    try {
+      const success = await window.api.invoke('update-item', itemData);
+      if (success) {
+        setItems((prevItems) =>
+          prevItems.map((item) =>
+            item.id === itemData.id ? { ...item, name: itemData.name, description: itemData.description } : item
+          )
+        );
+        return true;
+      } else {
+        throw new Error('Failed to update item on backend.');
+      }
+    } catch (err) {
+      console.error('Failed to update item:', err);
+      setError('Failed to update item.');
+      return false;
+    }
+  }, []);
 
   const deleteItem = useCallback(async (id: number) => {
     try {
@@ -102,5 +118,5 @@ export function useItems() {
     }
   }, [])
 
-  return { items, loading, error, fetchItems, createItem, updateItem, deleteItem }
+  return { items, loading, error, fetchItems, importFile, updateItem, deleteItem }
 } 
