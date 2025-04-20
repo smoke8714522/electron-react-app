@@ -9,7 +9,6 @@ import { createAppWindow } from './app'
 import { initializeDatabase, type Asset } from '../../main/schema'
 import { generateThumbnail, deleteThumbnail, getExistingThumbnailPath } from './ThumbnailService' // Import thumbnail helpers
 import crypto from 'crypto'; // For generating unique names
-import url from 'url'; // For file URLs
 
 // Define the vault root path. Use path.join for initial construction.
 const projectRoot = path.join(__dirname, '..', '..')
@@ -38,9 +37,23 @@ interface AssetWithThumbnail extends Asset {
   thumbnailPath?: string | null; 
 }
 
+// PRD §4.1 Library View - Define structure for filters from renderer
+interface AssetFilters {
+    year?: number | null;
+    advertiser?: string | null;
+    niche?: string | null;
+    sharesMin?: number | null;
+    sharesMax?: number | null;
+}
+
+// PRD §4.1 Library View - Define structure for sorting from renderer
+interface AssetSort {
+    sortBy?: 'fileName' | 'year' | 'shares' | 'createdAt'; // Added createdAt for default/newest
+    sortOrder?: 'ASC' | 'DESC';
+}
+
 // PRD §4.2 Data Model - Prepare SQL statements for the assets and custom_fields tables
-const getAssetsStmt = db.prepare('SELECT id, fileName, filePath, mimeType, size, createdAt, year, advertiser, niche, adspower FROM assets');
-const createAssetStmt = db.prepare('INSERT INTO assets (fileName, filePath, mimeType, size, createdAt, year, advertiser, niche, adspower) VALUES (@fileName, @filePath, @mimeType, @size, @createdAt, @year, @advertiser, @niche, @adspower)');
+const createAssetStmt = db.prepare('INSERT INTO assets (fileName, filePath, mimeType, size, createdAt, year, advertiser, niche, shares) VALUES (@fileName, @filePath, @mimeType, @size, @createdAt, @year, @advertiser, @niche, @shares)');
 const getAssetByIdStmt = db.prepare('SELECT * FROM assets WHERE id = ?');
 const getAssetPathStmt = db.prepare('SELECT filePath FROM assets WHERE id = ?'); // To get path for deletion
 const deleteAssetStmt = db.prepare('DELETE FROM assets WHERE id = ?'); // Cascades to custom_fields
@@ -83,17 +96,66 @@ app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
-  ipcMain.handle('get-assets', async (): Promise<AssetWithThumbnail[]> => {
+  // PRD §4.1 Library View: Update get-assets to handle filtering and sorting
+  ipcMain.handle('get-assets', async (_, params?: { filters?: AssetFilters, sort?: AssetSort }): Promise<AssetWithThumbnail[]> => {
     try {
-      const assets = getAssetsStmt.all() as Asset[];
-      const assetsWithThumbnails: AssetWithThumbnail[] = [];
+        let query = 'SELECT id, fileName, filePath, mimeType, size, createdAt, year, advertiser, niche, shares FROM assets';
+        const whereClauses: string[] = [];
+        const queryParams: (string | number)[] = [];
 
+        // Apply Filters (PRD §4.1 Library View)
+        if (params?.filters) {
+            const { year, advertiser, niche, sharesMin, sharesMax } = params.filters;
+            if (year !== undefined && year !== null && year !== 0) { // Assuming 0 means "All Years"
+                whereClauses.push('year = ?');
+                queryParams.push(year);
+            }
+            if (advertiser) {
+                whereClauses.push('advertiser = ?');
+                queryParams.push(advertiser);
+            }
+            if (niche) {
+                whereClauses.push('niche = ?');
+                queryParams.push(niche);
+            }
+            if (sharesMin !== undefined && sharesMin !== null) {
+                whereClauses.push('shares >= ?');
+                queryParams.push(sharesMin);
+            }
+            if (sharesMax !== undefined && sharesMax !== null) {
+                whereClauses.push('shares <= ?');
+                queryParams.push(sharesMax);
+            }
+        }
+
+        if (whereClauses.length > 0) {
+            query += ' WHERE ' + whereClauses.join(' AND ');
+        }
+
+        // Apply Sorting (PRD §4.1 Library View)
+        const sortBy = params?.sort?.sortBy || 'createdAt'; // Default sort by newest
+        const sortOrder = params?.sort?.sortOrder || 'DESC';
+        const validSortColumns = ['fileName', 'year', 'shares', 'createdAt'];
+        if (validSortColumns.includes(sortBy)) {
+            query += ` ORDER BY ${sortBy} ${sortOrder === 'ASC' ? 'ASC' : 'DESC'}`;
+        }
+
+        console.log("Executing get-assets query:", query, queryParams); // Debug log
+        const assets = db.prepare(query).all(...queryParams) as Asset[];
+
+      const assetsWithThumbnails: AssetWithThumbnail[] = [];
       // Iterate and add thumbnail path if it exists
       for (const asset of assets) {
         const thumbnailPath = await getExistingThumbnailPath(asset.id);
-        assetsWithThumbnails.push({ ...asset, thumbnailPath });
+            // Ensure shares is a number or null
+            const sharesAsNumber = typeof asset.shares === 'string' ? parseInt(asset.shares, 10) : asset.shares;
+            assetsWithThumbnails.push({ 
+                ...asset, 
+                shares: isNaN(sharesAsNumber as number) ? null : sharesAsNumber, // Handle potential NaN from parseInt
+                thumbnailPath 
+            });
       }
-      // PRD §4.1 Library View: Return assets including thumbnail path
+        
       return assetsWithThumbnails;
     } catch (error) {
       console.error('Failed to get assets:', error)
@@ -130,7 +192,7 @@ app.whenReady().then(() => {
         year: null,
         advertiser: null,
         niche: null,
-        adspower: null
+        shares: null // Renamed from adspower, defaulting to null
       });
       
       const newAssetId = info.lastInsertRowid;
@@ -226,7 +288,7 @@ app.whenReady().then(() => {
                 year: null,
                 advertiser: null,
                 niche: null,
-                adspower: null
+                shares: null // Renamed from adspower
             });
 
             const newAssetId = info.lastInsertRowid;
@@ -244,7 +306,13 @@ app.whenReady().then(() => {
             const newAsset = getAssetByIdStmt.get(newAssetId) as Asset;
             // Check for existing thumbnail (might not be ready)
             const thumbnailPath = await getExistingThumbnailPath(newAssetId);
-            importedAssets.push({ ...newAsset, thumbnailPath });
+            // Ensure shares is a number or null
+            const sharesAsNumber = typeof newAsset.shares === 'string' ? parseInt(newAsset.shares, 10) : newAsset.shares;
+            importedAssets.push({ 
+                ...newAsset, 
+                shares: isNaN(sharesAsNumber as number) ? null : sharesAsNumber,
+                thumbnailPath 
+            });
 
             results.importedCount++;
 
@@ -266,52 +334,71 @@ app.whenReady().then(() => {
     return { ...results, assets: results.success ? importedAssets : [] }; 
   });
 
-  ipcMain.handle('update-asset', async (_, { id, updates }: { id: number; updates: Partial<Asset> & { customFields?: Record<string, string | null> } }) => {
-    const { customFields, ...standardUpdates } = updates;
-    const allowedStandardFields = ['fileName', 'year', 'advertiser', 'niche', 'adspower']; // Fields allowed for direct update in 'assets' table
-
-    // Use a transaction for atomic update
-    const transaction = db.transaction((assetId: number, stdUpdates: Partial<Asset>, custFields?: Record<string, string | null>) => {
-        // 1. Update standard fields in the 'assets' table
+  // PRD §4.1 Library View: Handle updates for one or more assets
+  ipcMain.handle('update-asset', async (_, { id, updates }: { id: number, updates: Partial<Omit<Asset, 'id' | 'filePath' | 'mimeType' | 'size' | 'createdAt'>> & { customFields?: Record<string, string | null> } }): Promise<boolean> => {
+    const validFields = ['fileName', 'year', 'advertiser', 'niche', 'shares']; // Include 'shares'
         const setClauses: string[] = [];
-        const params: any[] = [];
-        for (const key of allowedStandardFields) {
-            if (key in stdUpdates && stdUpdates[key as keyof Asset] !== undefined) { // Check for undefined
+    const params: (string | number | null)[] = [];
+
+    // Build SET clauses for standard asset fields
+    for (const key of Object.keys(updates)) {
+        if (validFields.includes(key)) {
+            // Ensure null is passed correctly for fields that can be null
+            const value = updates[key as keyof typeof updates];
+            if (key === 'shares' && value === '') { // Treat empty string for shares as null
+                 setClauses.push(`${key} = ?`);
+                 params.push(null);
+            } else if (key === 'shares' && typeof value === 'string') {
+                 const numValue = parseInt(value, 10);
+                 setClauses.push(`${key} = ?`);
+                 params.push(isNaN(numValue) ? null : numValue); // Store as number or null
+            } else if (key === 'year' && typeof value === 'string') {
+                 const numValue = parseInt(value, 10);
+                 setClauses.push(`${key} = ?`);
+                 params.push(isNaN(numValue) ? null : numValue);
+            } else if (key === 'year' && value === '') {
+                 setClauses.push(`${key} = ?`);
+                 params.push(null);
+            } else if (value !== undefined) {
                 setClauses.push(`${key} = ?`);
-                params.push(stdUpdates[key as keyof Asset]);
+                params.push(value as string | number); // Already checked if valid key
             }
         }
+    }
 
+    const customFields = updates.customFields;
+
+    // Use a transaction for atomicity if updating both asset fields and custom fields
+    const transaction = db.transaction(() => {
+        // Update standard asset fields if necessary
         if (setClauses.length > 0) {
-            params.push(assetId);
+            params.push(id); // Add asset ID for the WHERE clause
             const sql = `UPDATE assets SET ${setClauses.join(', ')} WHERE id = ?`;
-            const updateStmt = db.prepare(sql);
-            const info = updateStmt.run(...params);
+            const info = db.prepare(sql).run(...params);
             if (info.changes === 0) {
-                 console.warn(`Asset with ID ${assetId} not found for update.`);
-                 // Optionally throw error to rollback transaction if asset must exist
-                 throw new Error(`Asset with ID ${assetId} not found.`);
+                // Optional: Check if asset actually exists first?
+                console.warn(`Update asset: No rows changed for ID ${id}. Asset might not exist.`);
+                // throw new Error(`Asset with ID ${id} not found or no changes made.`);
             }
         }
 
-        // 2. Update custom fields in the 'custom_fields' table
-        if (custFields) {
-            for (const [key, value] of Object.entries(custFields)) {
-                if (value === null || typeof value === 'undefined') {
-                    // Delete the custom field if value is null/undefined
-                    deleteCustomFieldStmt.run(assetId, key);
+        // Update custom fields if present
+        if (customFields) {
+            for (const [key, value] of Object.entries(customFields)) {
+                if (value === null || value === '') {
+                    // Delete custom field if value is null or empty
+                    deleteCustomFieldStmt.run(id, key);
                 } else {
-                    // Insert or update the custom field
-                    upsertCustomFieldStmt.run({ assetId, key, value });
+                    // Insert or update custom field
+                    upsertCustomFieldStmt.run({ assetId: id, key: key, value: value });
                 }
             }
         }
-        return true; // Indicate success within transaction
     });
 
     try {
-      const success = transaction(id, standardUpdates, customFields);
-      return success;
+        transaction();
+        return true;
     } catch (error) {
       console.error(`Failed to update asset ID ${id}:`, error);
       return false;

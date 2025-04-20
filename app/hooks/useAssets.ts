@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 
-// PRD §4.2 Data Model - Define Asset structure (copied from main/schema.ts)
-// Ideally, share types via a common package or define in a shared types file within 'app'
+// PRD §4.2 Data Model - Define Asset structure (reflects schema changes)
 export interface Asset {
   id: number;
   fileName: string; // Original filename
@@ -12,13 +11,11 @@ export interface Asset {
   year: number | null;
   advertiser: string | null;
   niche: string | null;
-  adspower: string | null;
-  // Note: Custom fields are not directly part of the Asset type here
-  // They need to be fetched/managed separately if displayed/edited
+  shares: number | null; // Renamed from adspower, now numeric
 }
 
 // PRD §4.1 Library View: Define the fields available for bulk editing
-export type EditableAssetFields = Pick<Asset, 'year' | 'advertiser' | 'niche' | 'adspower'>;
+export type EditableAssetFields = Pick<Asset, 'year' | 'advertiser' | 'niche' | 'shares'>; // Updated field
 export type BulkUpdatePayload = Partial<EditableAssetFields>;
 
 // PRD §4.1 Library View: Extend Asset with optional thumbnail path for UI
@@ -48,32 +45,36 @@ export interface BatchUpdateResult {
     errors: { id: number, error: string }[];
 }
 
+// PRD §4.1 Library View - Define structure for filters passed to fetchAssets
+export interface FetchFilters {
+    year?: number | null;
+    advertiser?: string | null;
+    niche?: string | null;
+    sharesRange?: [number | null, number | null]; // [min, max]
+}
+
+// PRD §4.1 Library View - Define structure for sorting passed to fetchAssets
+export interface FetchSort {
+    sortBy?: 'fileName' | 'year' | 'shares' | 'createdAt';
+    sortOrder?: 'ASC' | 'DESC';
+}
+
 // Argument type for update-asset IPC call
 export type UpdateAssetPayload = {
   id: number;
-  // Allow updates for any subset of Asset fields, excluding read-only ones
-  // Includes custom fields logic if implemented
-  updates: Partial<Omit<Asset, 'id' | 'filePath' | 'mimeType' | 'size' | 'createdAt'> & { customFields?: Record<string, string | null> }>;
+  updates: Partial<Omit<Asset, 'id' | 'filePath' | 'mimeType' | 'size' | 'createdAt'>> & { customFields?: Record<string, string | null> };
 };
 
 // Define the API structure exposed by the preload script more specifically
-// This improves type safety when calling window.api.invoke
 interface ExposedApi {
-  // Updated return type for get-assets
-  invoke(channel: 'get-assets'): Promise<AssetWithThumbnail[]>; 
+  // Updated invoke signature for get-assets to accept filters/sort
+  invoke(channel: 'get-assets', params?: { filters?: { year?: number | null, advertiser?: string | null, niche?: string | null, sharesMin?: number | null, sharesMax?: number | null }, sort?: { sortBy?: string, sortOrder?: string } }): Promise<AssetWithThumbnail[]>; 
   invoke(channel: 'open-file-dialog'): Promise<string | null>;
-  // Updated return type for create-asset
   invoke(channel: 'create-asset', sourcePath: string): Promise<CreateAssetResult>; 
   invoke(channel: 'update-asset', payload: UpdateAssetPayload): Promise<boolean>;
   invoke(channel: 'delete-asset', id: number): Promise<boolean>;
-  // Add bulk-import-assets channel definition
   invoke(channel: 'bulk-import-assets'): Promise<BulkImportResult>;
-  // Keep the generic fallback for potential other invoke calls if needed
   invoke(channel: string, ...args: any[]): Promise<any>; 
-  // Add send/receive/removeAllListeners if used, with specific channel signatures if possible
-  // send: (channel: string, ...args: any[]) => void;
-  // receive: (channel: string, func: (...args: any[]) => void) => void;
-  // removeAllListeners: (channel: string) => void;
 }
 
 // Augment the Window interface
@@ -90,11 +91,47 @@ export function useAssets() {
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchAssets = useCallback(async () => {
+  // PRD §4.1 Library View: Update fetchAssets to accept filters and sorting
+  const fetchAssets = useCallback(async (filters?: FetchFilters, sort?: FetchSort) => {
     setLoading(true)
     setError(null)
     try {
-      const fetchedAssets = await window.api.invoke('get-assets')
+      // Prepare params for IPC call
+      const ipcParams: any = {}; // Use 'any' temporarily for flexibility
+      if (filters) {
+          ipcParams.filters = {
+              year: filters.year,
+              advertiser: filters.advertiser,
+              niche: filters.niche,
+              sharesMin: filters.sharesRange ? filters.sharesRange[0] : null,
+              sharesMax: filters.sharesRange ? filters.sharesRange[1] : null,
+          };
+          // Remove null/undefined keys to keep payload clean
+          Object.keys(ipcParams.filters).forEach(key => {
+            if (ipcParams.filters[key] === null || ipcParams.filters[key] === undefined || ipcParams.filters[key] === '' || (key === 'year' && ipcParams.filters[key] === 0)) {
+              delete ipcParams.filters[key];
+            }
+          });
+      }
+      if (sort) {
+          ipcParams.sort = {
+              sortBy: sort.sortBy,
+              sortOrder: sort.sortOrder
+          };
+          // Remove null/undefined keys
+          Object.keys(ipcParams.sort).forEach(key => {
+            if (ipcParams.sort[key] === null || ipcParams.sort[key] === undefined) {
+              delete ipcParams.sort[key];
+            }
+          });
+      }
+
+      // Only pass params if filters or sort objects have keys
+      const paramsToSend = (ipcParams.filters && Object.keys(ipcParams.filters).length > 0) || 
+                           (ipcParams.sort && Object.keys(ipcParams.sort).length > 0) 
+                           ? ipcParams : undefined;
+
+      const fetchedAssets = await window.api.invoke('get-assets', paramsToSend);
       setAssets(fetchedAssets || [])
     } catch (err) {
       console.error('Failed to fetch assets:', err)
@@ -102,11 +139,12 @@ export function useAssets() {
       setAssets([])
     }
     setLoading(false)
-  }, [])
+  }, []) // Dependencies remain empty as fetchAssets itself doesn't depend on external state changes
 
+  // Initial fetch on mount - no filters/sort initially
   useEffect(() => {
     fetchAssets()
-  }, [fetchAssets])
+  }, [fetchAssets]) // fetchAssets is stable due to useCallback([])
 
   const createAsset = useCallback(async (): Promise<AssetWithThumbnail | null> => {
     setError(null);
@@ -167,6 +205,17 @@ export function useAssets() {
     let success = false;
     try {
       setLoading(true); 
+      // Ensure shares is sent as number or null
+      if (payload.updates.shares !== undefined) {
+          payload.updates.shares = payload.updates.shares === null ? null : Number(payload.updates.shares);
+          if (isNaN(payload.updates.shares as number)) payload.updates.shares = null; // Handle NaN case
+      }
+       // Ensure year is sent as number or null
+      if (payload.updates.year !== undefined) {
+          payload.updates.year = payload.updates.year === null ? null : Number(payload.updates.year);
+          if (isNaN(payload.updates.year as number)) payload.updates.year = null; // Handle NaN case
+      }
+
       success = await window.api.invoke('update-asset', payload);
       if (success) {
         await fetchAssets(); // Re-fetch assets to get updated data
@@ -204,60 +253,51 @@ export function useAssets() {
     return success;
   }, [fetchAssets]); // Removed setLoading, setError
 
-  // PRD §4.1 Library View: Add bulk update function
+  // PRD §4.1 Library View: Add bulk update function, ensuring 'shares' is handled correctly
   const bulkUpdateAssets = useCallback(async (selectedIds: number[], updates: BulkUpdatePayload): Promise<BatchUpdateResult> => {
       setLoading(true);
       setError(null);
-      const results: { success: boolean, id: number, error?: string }[] = [];
-      let successCount = 0;
-      const errors: { id: number, error: string }[] = [];
+    const results: BatchUpdateResult = { success: true, updatedCount: 0, errors: [] };
 
-      // Sequentially update each selected asset
+    // Prepare the update payload, converting shares/year if necessary
+    const processedUpdates = { ...updates };
+    if (processedUpdates.shares !== undefined) {
+        processedUpdates.shares = processedUpdates.shares === null ? null : Number(processedUpdates.shares);
+        if (isNaN(processedUpdates.shares as number)) processedUpdates.shares = null; // Handle NaN
+    }
+     if (processedUpdates.year !== undefined) {
+        processedUpdates.year = processedUpdates.year === null ? null : Number(processedUpdates.year);
+        if (isNaN(processedUpdates.year as number)) processedUpdates.year = null; // Handle NaN
+    }
+
+    // Iterate and call updateAsset for each selected ID
+    // Note: This is sequential. A dedicated backend bulk update endpoint would be more efficient.
       for (const id of selectedIds) {
           try {
-              // Prepare payload for single asset update
-              const payload: UpdateAssetPayload = { 
-                  id,
-                  // Ensure we only pass allowed fields for update
-                  updates: {
-                    ...(updates.year !== undefined && { year: updates.year }),
-                    ...(updates.advertiser !== undefined && { advertiser: updates.advertiser }),
-                    ...(updates.niche !== undefined && { niche: updates.niche }),
-                    ...(updates.adspower !== undefined && { adspower: updates.adspower }),
-                    // Note: Does not handle custom fields in this bulk update
-                  }
-              };
+            const payload: UpdateAssetPayload = { id, updates: processedUpdates };
               const success = await window.api.invoke('update-asset', payload);
-              results.push({ success, id });
               if (success) {
-                  successCount++;
+                results.updatedCount++;
               } else {
-                 // Assume if success is false, an error occurred (though invoke might not throw)
-                 // The backend should ideally return an error message
-                 const errorMsg = `Update failed for asset ID ${id}.`;
-                 console.error(errorMsg);
-                 errors.push({ id, error: 'Update operation returned false.' });
+                results.success = false;
+                results.errors.push({ id, error: 'Update failed via IPC call.' });
               }
           } catch (err: any) {
-              console.error(`Failed to update asset ID ${id}:`, err);
-              const errorMsg = err.message || 'Unknown error during update';
-              results.push({ success: false, id, error: errorMsg });
-              errors.push({ id, error: errorMsg });
-          }
+            console.error(`Error updating asset ${id}:`, err);
+            results.success = false;
+            results.errors.push({ id, error: err.message || 'Unknown error during update.' });
+        }
       }
 
-      // Refresh assets list if at least one update was attempted (even if it failed, to ensure UI consistency)
-      if (selectedIds.length > 0) {
+    // Refresh the asset list regardless of partial failures to show updates
         await fetchAssets();
-      }
       
       setLoading(false);
-      // Set error state if there were any failures
-      if (errors.length > 0) {
-          setError(`Bulk update completed with ${errors.length} error(s). See console for details.`);
+    if (results.errors.length > 0) {
+        setError(`Bulk update completed with ${results.errors.length} error(s).`);
       }
 
-      return { success: errors.length === 0, updatedCount: successCount, errors };
+    return results;
   }, [fetchAssets]);
 
   // Expose bulkImportAssets along with other actions

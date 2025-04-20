@@ -24,13 +24,13 @@ function formatDate(dateString: string): string {
 
 export default function App() {
   const [activeView, setActiveView] = useState<'dashboard' | 'library'>('library')
-  const { assets, loading, error, createAsset, updateAsset, deleteAsset, bulkImportAssets, fetchAssets } = useAssets()
+  const { assets, loading, error, createAsset, updateAsset, deleteAsset, bulkImportAssets, fetchAssets, bulkUpdateAssets } = useAssets()
   const [currentAsset, setCurrentAsset] = useState<Asset | null>(null)
   const [editFileName, setEditFileName] = useState('')
   const [editYear, setEditYear] = useState<string>('')
   const [editAdvertiser, setEditAdvertiser] = useState('')
   const [editNiche, setEditNiche] = useState('')
-  const [editAdspower, setEditAdspower] = useState('')
+  const [editShares, setEditShares] = useState<string>('')
 
   const handleEditSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -40,10 +40,10 @@ export default function App() {
       id: currentAsset.id,
       updates: {
         fileName: editFileName || currentAsset.fileName,
-        year: editYear ? parseInt(editYear, 10) : null,
+        year: editYear === '' ? null : parseInt(editYear, 10),
         advertiser: editAdvertiser || null,
         niche: editNiche || null,
-        adspower: editAdspower || null,
+        shares: editShares === '' ? null : parseInt(editShares, 10),
       }
     };
 
@@ -58,7 +58,7 @@ export default function App() {
     setEditYear(asset.year?.toString() || '')
     setEditAdvertiser(asset.advertiser || '')
     setEditNiche(asset.niche || '')
-    setEditAdspower(asset.adspower || '')
+    setEditShares(asset.shares?.toString() || '')
   }
 
   const handleCancelEdit = () => {
@@ -67,7 +67,7 @@ export default function App() {
     setEditYear('')
     setEditAdvertiser('')
     setEditNiche('')
-    setEditAdspower('')
+    setEditShares('')
   }
 
   const handleDelete = async (id: number) => {
@@ -140,13 +140,14 @@ export default function App() {
             />
           </div>
           <div className="mb-4">
-            <label htmlFor="edit-adspower" className="block mb-1 text-sm font-medium">Adspower Profile:</label>
+            <label htmlFor="edit-shares" className="block mb-1 text-sm font-medium">Shares:</label>
             <input
-              id="edit-adspower"
-              type="text"
-              value={editAdspower}
-              onChange={(e) => setEditAdspower(e.target.value)}
-              placeholder="e.g., Profile ID or Name"
+              id="edit-shares"
+              type="number"
+              min="0"
+              value={editShares}
+              onChange={(e) => setEditShares(e.target.value)}
+              placeholder="e.g., 100"
               className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
             />
           </div>
@@ -191,7 +192,7 @@ export default function App() {
                   {asset.year && <p>Year: <span className="text-gray-300">{asset.year}</span></p>}
                   {asset.advertiser && <p>Advertiser: <span className="text-gray-300">{asset.advertiser}</span></p>}
                   {asset.niche && <p>Niche: <span className="text-gray-300">{asset.niche}</span></p>}
-                  {asset.adspower && <p>Adspower: <span className="text-gray-300">{asset.adspower}</span></p>}
+                  {asset.shares !== null && asset.shares !== undefined && <p>Shares: <span className="text-gray-300">{asset.shares}</span></p>}
                 </div>
               </div>
               <div className="flex-shrink-0 flex gap-2 self-end sm:self-center">
@@ -250,6 +251,7 @@ export default function App() {
             fetchAssets={fetchAssets}
             deleteAsset={deleteAsset}
             updateAsset={updateAsset}
+            bulkUpdateAssets={bulkUpdateAssets}
           />
         }
       </main>

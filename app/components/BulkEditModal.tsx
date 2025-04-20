@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { FiSave, FiXCircle } from 'react-icons/fi';
 import { Asset } from '../hooks/useAssets'; // Assuming Asset type is defined here
 
-// PRD §4.1 Library View: Define the fields available for bulk editing
-type EditableAssetFields = Pick<Asset, 'year' | 'advertiser' | 'niche' | 'adspower'>;
+// PRD §4.1 Library View: Define the fields available for bulk editing (using shares)
+type EditableAssetFields = Pick<Asset, 'year' | 'advertiser' | 'niche' | 'shares'>;
 export type BulkUpdatePayload = Partial<EditableAssetFields>;
 
 interface BulkEditModalProps {
@@ -18,13 +18,13 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({ isOpen, onClose, onSave, 
     const [year, setYear] = useState<string>('');
     const [advertiser, setAdvertiser] = useState<string>('');
     const [niche, setNiche] = useState<string>('');
-    const [adspower, setAdspower] = useState<string>('');
+    const [shares, setShares] = useState<string>(''); // Renamed from adspower
 
     // State for the "Apply" checkboxes
     const [applyYear, setApplyYear] = useState<boolean>(false);
     const [applyAdvertiser, setApplyAdvertiser] = useState<boolean>(false);
     const [applyNiche, setApplyNiche] = useState<boolean>(false);
-    const [applyAdspower, setApplyAdspower] = useState<boolean>(false);
+    const [applyShares, setApplyShares] = useState<boolean>(false); // Renamed from applyAdspower
 
     // Loading state for the save operation
     const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -35,11 +35,11 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({ isOpen, onClose, onSave, 
             setYear('');
             setAdvertiser('');
             setNiche('');
-            setAdspower('');
+            setShares(''); // Renamed from setAdspower
             setApplyYear(false);
             setApplyAdvertiser(false);
             setApplyNiche(false);
-            setApplyAdspower(false);
+            setApplyShares(false); // Renamed from setApplyAdspower
             setIsSaving(false);
         }
     }, [isOpen]);
@@ -47,13 +47,16 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({ isOpen, onClose, onSave, 
     // PRD §4.1 Library View: Handle save action
     const handleSave = async () => {
         const updates: BulkUpdatePayload = {};
-        if (applyYear) updates.year = year === '' ? null : parseInt(year, 10) || null; // Handle empty string/invalid number
-        if (applyAdvertiser) updates.advertiser = advertiser || null; // Handle empty string
-        if (applyNiche) updates.niche = niche || null; // Handle empty string
-        if (applyAdspower) updates.adspower = adspower || null; // Handle empty string
+        if (applyYear) updates.year = year === '' ? null : parseInt(year, 10) || null;
+        if (applyAdvertiser) updates.advertiser = advertiser || null;
+        if (applyNiche) updates.niche = niche || null;
+        if (applyShares) {
+            const numShares = parseInt(shares, 10);
+            updates.shares = shares === '' ? null : (isNaN(numShares) ? null : numShares);
+        }
 
         // Check if any field is selected to apply
-        if (Object.keys(updates).length === 0) {
+        if (!applyYear && !applyAdvertiser && !applyNiche && !applyShares) {
             alert('Please check at least one field to apply.');
             return;
         }
@@ -155,24 +158,25 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({ isOpen, onClose, onSave, 
                         />
                     </div>
 
-                    {/* Adspower Field */}
+                    {/* Shares Field */}
                     <div className="flex items-center space-x-3">
                         <input
                             type="checkbox"
-                            id="applyAdspower"
-                            checked={applyAdspower}
-                            onChange={(e) => setApplyAdspower(e.target.checked)}
+                            id="applyShares"
+                            checked={applyShares}
+                            onChange={(e) => setApplyShares(e.target.checked)}
                             className="h-5 w-5 rounded text-blue-500 bg-gray-700 border-gray-600 focus:ring-blue-500 focus:ring-offset-gray-800"
                         />
-                        <label htmlFor="applyAdspower" className="w-24 flex-shrink-0 text-sm font-medium">Adspower ID:</label>
+                        <label htmlFor="applyShares" className="w-24 flex-shrink-0 text-sm font-medium">Shares:</label>
                         <input
-                            type="text"
-                            id="adspower"
-                            value={adspower}
-                            onChange={(e) => setAdspower(e.target.value)}
-                            placeholder="Adspower Profile ID"
+                            type="number"
+                            id="shares"
+                            min="0"
+                            value={shares}
+                            onChange={(e) => setShares(e.target.value)}
+                            placeholder="e.g., 100"
                             className="flex-grow px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                            disabled={!applyAdspower}
+                            disabled={!applyShares}
                         />
                     </div>
                 </div>
@@ -188,7 +192,7 @@ const BulkEditModal: React.FC<BulkEditModalProps> = ({ isOpen, onClose, onSave, 
                     </button>
                     <button
                         onClick={handleSave}
-                        disabled={isSaving || !(applyYear || applyAdvertiser || applyNiche || applyAdspower)}
+                        disabled={isSaving || !(applyYear || applyAdvertiser || applyNiche || applyShares)}
                         className="flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm font-medium transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <FiSave className="mr-1.5" size={16} />
