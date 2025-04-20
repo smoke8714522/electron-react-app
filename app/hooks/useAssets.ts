@@ -17,11 +17,24 @@ export interface Asset {
   // They need to be fetched/managed separately if displayed/edited
 }
 
+// PRD §4.1 Library View - Extend Asset with optional thumbnail path for UI
+export interface AssetWithThumbnail extends Asset {
+  thumbnailPath?: string | null;
+}
+
 // Result type for create-asset IPC call
 export interface CreateAssetResult {
   success: boolean;
-  asset?: Asset;
+  asset?: AssetWithThumbnail; // Updated to include thumbnail path
   error?: string;
+}
+
+// Result type for bulk-import-assets IPC call
+export interface BulkImportResult {
+    success: boolean;
+    importedCount: number;
+    assets?: AssetWithThumbnail[]; // Returns successfully imported assets
+    errors: { file: string, error: string }[];
 }
 
 // Argument type for update-asset IPC call
@@ -35,11 +48,15 @@ export type UpdateAssetPayload = {
 // Define the API structure exposed by the preload script more specifically
 // This improves type safety when calling window.api.invoke
 interface ExposedApi {
-  invoke(channel: 'get-assets'): Promise<Asset[]>;
+  // Updated return type for get-assets
+  invoke(channel: 'get-assets'): Promise<AssetWithThumbnail[]>; 
   invoke(channel: 'open-file-dialog'): Promise<string | null>;
-  invoke(channel: 'create-asset', sourcePath: string): Promise<CreateAssetResult>;
+  // Updated return type for create-asset
+  invoke(channel: 'create-asset', sourcePath: string): Promise<CreateAssetResult>; 
   invoke(channel: 'update-asset', payload: UpdateAssetPayload): Promise<boolean>;
   invoke(channel: 'delete-asset', id: number): Promise<boolean>;
+  // Add bulk-import-assets channel definition
+  invoke(channel: 'bulk-import-assets'): Promise<BulkImportResult>;
   // Keep the generic fallback for potential other invoke calls if needed
   invoke(channel: string, ...args: any[]): Promise<any>; 
   // Add send/receive/removeAllListeners if used, with specific channel signatures if possible
@@ -57,7 +74,8 @@ declare global {
 
 // Renamed hook: useAssets
 export function useAssets() {
-  const [assets, setAssets] = useState<Asset[]>([])
+  // State holds AssetWithThumbnail to include potential thumbnail paths
+  const [assets, setAssets] = useState<AssetWithThumbnail[]>([]) 
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -79,22 +97,20 @@ export function useAssets() {
     fetchAssets()
   }, [fetchAssets])
 
-  const createAsset = useCallback(async (): Promise<Asset | null> => {
+  const createAsset = useCallback(async (): Promise<AssetWithThumbnail | null> => {
     setError(null);
-    let assetCreated: Asset | null = null;
+    let assetCreated: AssetWithThumbnail | null = null;
     try {
       const sourcePath = await window.api.invoke('open-file-dialog');
       if (!sourcePath) {
-        return null;
+        return null; // User cancelled dialog
       }
       setLoading(true);
       const result = await window.api.invoke('create-asset', sourcePath);
       setLoading(false);
       if (result.success && result.asset) {
-        // No need to manually add, fetchAssets will be called if needed (or rely on initial fetch)
-        // setAssets((prevAssets) => [...prevAssets, result.asset]);
-        assetCreated = result.asset;
-        await fetchAssets(); // Re-fetch to get the latest list including the new one
+        assetCreated = result.asset; // Result now includes potential thumbnail path
+        await fetchAssets(); // Re-fetch to ensure list consistency and get any newly generated thumbnails
       } else {
         console.error('Asset creation failed:', result.error);
         setError(`Asset creation failed: ${result.error || 'Unknown error'}`);
@@ -105,29 +121,56 @@ export function useAssets() {
       setLoading(false);
     }
     return assetCreated;
-  }, [fetchAssets, setLoading, setError]); // Updated dependencies
+  }, [fetchAssets]); // Removed setLoading, setError as direct dependencies (covered by useCallback)
+
+  // PRD Task 1: Add bulk import function
+  const bulkImportAssets = useCallback(async (): Promise<BulkImportResult> => {
+      setLoading(true);
+      setError(null);
+      let result: BulkImportResult = { success: false, importedCount: 0, errors: [], assets: [] };
+      try {
+          result = await window.api.invoke('bulk-import-assets');
+          if (result.importedCount > 0) {
+              await fetchAssets(); // Re-fetch if any assets were successfully imported
+          }
+          if (result.errors.length > 0) {
+              setError(`Bulk import completed with ${result.errors.length} errors. Check console for details.`);
+              // Log details for debugging
+              result.errors.forEach(e => console.error(`Import Error: ${e.file} - ${e.error}`));
+          } else {
+               setError(null); // Clear previous errors if successful
+          }
+      } catch (err) {
+          console.error('Failed to execute bulk import:', err);
+          setError('An unexpected error occurred during bulk import.');
+          // Ensure result reflects the failure
+          result = { success: false, importedCount: 0, errors: [{ file: 'Unknown', error: 'IPC call failed' }], assets: [] };
+      } finally {
+          setLoading(false);
+      }
+      return result;
+  }, [fetchAssets]); // Removed setLoading, setError
 
   const updateAsset = useCallback(async (payload: UpdateAssetPayload): Promise<boolean> => {
     setError(null);
     let success = false;
     try {
-      setLoading(true); // Indicate loading during update
+      setLoading(true); 
       success = await window.api.invoke('update-asset', payload);
       if (success) {
-        // Re-fetch assets to get updated data, including custom fields if applicable
-        await fetchAssets(); 
+        await fetchAssets(); // Re-fetch assets to get updated data
       } else {
         throw new Error('Backend indicated update failed.');
       }
     } catch (err) {
       console.error('Failed to update asset:', err);
       setError('Failed to update asset.');
-      success = false; // Ensure success is false on error
+      success = false; 
     } finally {
-      setLoading(false); // Ensure loading is turned off
+      setLoading(false); 
     }
     return success;
-  }, [fetchAssets, setLoading, setError]); // Updated dependencies
+  }, [fetchAssets]); // Removed setLoading, setError
 
   const deleteAsset = useCallback(async (id: number): Promise<boolean> => {
     setError(null);
@@ -136,9 +179,7 @@ export function useAssets() {
       setLoading(true);
       success = await window.api.invoke('delete-asset', id);
       if (success) {
-        // Re-fetch is simpler than filtering locally if order matters or for consistency
-        await fetchAssets(); 
-        // Or filter locally: setAssets((prevAssets) => prevAssets.filter((asset) => asset.id !== id))
+        await fetchAssets(); // Re-fetch after delete
       } else {
         throw new Error('Backend indicated delete failed.')
       }
@@ -150,7 +191,8 @@ export function useAssets() {
        setLoading(false);
     }
     return success;
-  }, [fetchAssets, setLoading, setError]); // Updated dependencies
+  }, [fetchAssets]); // Removed setLoading, setError
 
-  return { assets, loading, error, fetchAssets, createAsset, updateAsset, deleteAsset }
+  // Expose bulkImportAssets along with other actions
+  return { assets, loading, error, fetchAssets, createAsset, bulkImportAssets, updateAsset, deleteAsset }
 } 
