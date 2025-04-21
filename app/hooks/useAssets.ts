@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { ExposedApi as ExposedApiInterface } from '../index.d' // Import the interface with an alias to avoid conflict
 
 // --- Versioning Result Types ---
 export interface CreateVersionResult {
@@ -125,6 +126,12 @@ declare global {
   interface Window {
     api: ExposedApi;
   }
+}
+
+// Define a simpler type for the master asset list used in the dropdown
+export interface MasterAssetOption {
+  id: number;
+  fileName: string;
 }
 
 // Renamed hook: useAssets
@@ -385,27 +392,25 @@ export function useAssets() {
     }
   }, []); // No dependencies needed as it doesn't interact with hook state
 
-  const addToGroup = useCallback(async (versionId: number, masterId: number): Promise<AddToGroupResult> => {
-    setLoading(true);
-    setError(null);
-    let result: AddToGroupResult = { success: false, error: 'Initialization failed' };
-    try {
-      result = await window.api.invoke('add-to-group', { versionId, masterId });
-      if (result.success) {
-        await fetchAssets(); // Refresh master list (accumulated shares might change)
-      } else {
-        setError(`Failed to add to group: ${result.error || 'Unknown error'}`);
-        console.error('Add to group failed:', result.error);
+  const addToGroup = useCallback(async (versionId: number, masterId: number): Promise<{ success: boolean, error?: string }> => {
+      setLoading(true);
+      try {
+          const result = await window.api.invoke('add-to-group', { versionId, masterId });
+          if (result.success) {
+              await fetchAssets(); // Refresh after successful add
+              setError(null);
+          } else {
+              setError(result.error || 'Failed to add to group');
+          }
+          setLoading(false);
+          return result;
+      } catch (err: any) {
+          console.error('Error adding to group:', err);
+          setError(err.message || 'An unexpected error occurred');
+          setLoading(false);
+          return { success: false, error: err.message };
       }
-    } catch (err: any) {
-      console.error('Error invoking add-to-group:', err);
-      setError(`An unexpected error occurred: ${err.message}`);
-      result = { success: false, error: err.message || 'IPC call failed' };
-    } finally {
-      setLoading(false);
-    }
-    return result;
-  }, [fetchAssets]);
+  }, [fetchAssets]); // Add fetchAssets dependency
 
   const removeFromGroup = useCallback(async (versionId: number): Promise<RemoveFromGroupResult> => {
     setLoading(true);
@@ -451,6 +456,62 @@ export function useAssets() {
     return result;
   }, [fetchAssets]);
 
+  // --- Add getMasterAssets function ---
+  const getMasterAssets = useCallback(async (searchTerm?: string): Promise<MasterAssetOption[]> => {
+    setLoading(true);
+    try {
+      // Use the aliased interface for the type cast
+      const result = await (window.api as ExposedApiInterface).getMasterAssets(searchTerm);
+      if (result.success && result.assets) {
+        setError(null);
+        setLoading(false);
+        return result.assets;
+      } else {
+        throw new Error(result.error || 'Failed to fetch master assets');
+      }
+    } catch (err: any) {
+      console.error('Error fetching master assets:', err);
+      setError(err.message || 'An unexpected error occurred');
+      setLoading(false);
+      return []; // Return empty array on error
+    }
+  }, []);
+
+  // --- Update bulkAddToGroup function ---
+  const bulkAddToGroup = useCallback(async (versionIds: number[], masterId: number): Promise<{ success: boolean, errors: { id: number, error: string }[] }> => {
+    setLoading(true);
+    const errors: { id: number, error: string }[] = [];
+    let overallSuccess = true;
+
+    for (const versionId of versionIds) {
+      if (versionId === masterId) {
+        errors.push({ id: versionId, error: 'Cannot group an asset under itself.' });
+        overallSuccess = false;
+        continue; // Skip this one
+      }
+      try {
+        const result = await window.api.invoke('add-to-group', { versionId, masterId });
+        if (!result.success) {
+          errors.push({ id: versionId, error: result.error || 'Unknown error adding to group.' });
+          overallSuccess = false;
+        }
+      } catch (err: any) {
+        errors.push({ id: versionId, error: err.message || 'IPC error adding to group.' });
+        overallSuccess = false;
+      }
+    }
+
+    setLoading(false);
+    setError(errors.length > 0 ? `Some errors occurred during bulk grouping.` : null);
+    
+    // Refresh asset list if at least one operation might have succeeded (or to clear invalid states)
+    if (overallSuccess || errors.length < versionIds.length) {
+        await fetchAssets(); // Re-fetch the main asset list
+    }
+
+    return { success: overallSuccess, errors };
+  }, [fetchAssets]); // Add fetchAssets dependency
+
   // Expose bulkImportAssets along with other actions
   return { 
       assets, 
@@ -468,5 +529,7 @@ export function useAssets() {
       addToGroup,
       removeFromGroup,
       promoteVersion, // Export the new function
+      getMasterAssets, // Add new function
+      bulkAddToGroup   // Add new function
   }
 } 

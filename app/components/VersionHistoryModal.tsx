@@ -1,14 +1,25 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AssetWithThumbnail, BulkUpdatePayload, useAssets, GetVersionsResult } from '../hooks/useAssets';
+import { AssetWithThumbnail, BulkUpdatePayload, useAssets, GetVersionsResult, MasterAssetOption } from '../hooks/useAssets';
 import Modal from 'react-modal'; // Default export of react-modal
 import BulkEditModal from './BulkEditModal'; // Import for bulk editing
 import { FiX, FiTrash2, FiEdit, FiPlusSquare, FiCornerUpLeft, FiUploadCloud, FiChevronsUp } from 'react-icons/fi'; // Added UploadCloud, ChevronsUp
 import { Tooltip } from 'react-tooltip'; // Import Tooltip
+import BulkGroupModal from './BulkGroupModal'; // Import BulkGroupModal
 
 interface VersionHistoryModalProps {
   masterId: number | null;
   isOpen: boolean;
   onClose: () => void;
+  getVersions: (masterId: number) => Promise<{ success: boolean; assets?: AssetWithThumbnail[] | undefined; error?: string | undefined }>;
+  createVersion: (payload: { masterId: number; sourcePath: string; }) => Promise<{ success: boolean; newId?: number | undefined; error?: string | undefined }>;
+  deleteAsset: (id: number) => Promise<boolean>;
+  bulkUpdateAssets: (selectedIds: number[], updates: BulkUpdatePayload) => Promise<{ success: boolean; updatedCount: number; errors: { id: number; error: string; }[]; }>;
+  addToGroup: (versionId: number, masterId: number) => Promise<{ success: boolean; error?: string | undefined }>;
+  removeFromGroup: (payload: { versionId: number; }) => Promise<{ success: boolean; error?: string | undefined }>;
+  promoteVersion: (payload: { versionId: number; }) => Promise<{ success: boolean; error?: string | undefined }>;
+  fetchAssets: () => Promise<void>;
+  getMasterAssets: (searchTerm?: string | undefined) => Promise<MasterAssetOption[]>;
+  bulkAddToGroup: (versionIds: number[], masterId: number) => Promise<{ success: boolean; errors: { id: number; error: string; }[]; }>;
 }
 
 // Ensure this type matches the actual return from getVersions
@@ -30,8 +41,18 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
   masterId,
   isOpen,
   onClose,
+  getVersions,
+  createVersion,
+  deleteAsset,
+  bulkUpdateAssets,
+  addToGroup,
+  removeFromGroup,
+  promoteVersion,
+  fetchAssets,
+  getMasterAssets,
+  bulkAddToGroup
 }) => {
-  const { getVersions, createVersion, removeFromGroup, bulkUpdateAssets, deleteAsset, promoteVersion, fetchAssets, loading: hookLoading } = useAssets();
+  const { loading: hookLoading } = useAssets();
   const [versions, setVersions] = useState<VersionAsset[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +60,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
   // Bulk Edit State
   const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
+  const [isBulkGroupModalOpen, setIsBulkGroupModalOpen] = useState(false);
 
   const selectAllCheckboxRef = useRef<HTMLInputElement>(null); // Ref for select all checkbox
 
@@ -136,7 +158,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
       setIsLoading(true);
       setError(null);
-      const result = await createVersion(masterId, sourcePath);
+      const result = await createVersion({ masterId, sourcePath });
       if (result.success) {
         alert(`New version created successfully (ID: ${result.newId}).`);
         fetchVersionsData(); // Reload versions
@@ -167,7 +189,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
 
     for (const versionId of selectedVersionIds) {
       try {
-        const result = await removeFromGroup(versionId);
+        const result = await removeFromGroup({ versionId });
         if (result.success) {
           successes++;
         } else {
@@ -204,7 +226,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     setError(null);
     try {
       // Assuming promoteVersion hook exists and takes versionId
-      const result = await promoteVersion(versionId);
+      const result = await promoteVersion({ versionId });
       if (result.success) {
         alert(`Version ${versionId} successfully promoted.`);
         // Promotion changes the master, so close current modal and refresh library
@@ -288,6 +310,9 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     fetchAssets(); // Reload main library view
     setIsLoading(false);
   };
+
+  const handleOpenBulkGroupModal = () => setIsBulkGroupModalOpen(true);
+  const handleCloseBulkGroupModal = () => setIsBulkGroupModalOpen(false);
 
   if (!isOpen) {
     return null;
@@ -448,6 +473,15 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
         onClose={() => setIsBulkEditModalOpen(false)}
         onSave={handleBulkEditSave}
         selectedCount={selectedVersionIds.size}
+      />
+
+      {/* Bulk Group Modal */}
+      <BulkGroupModal
+        isOpen={isBulkGroupModalOpen}
+        onClose={handleCloseBulkGroupModal}
+        onSave={bulkAddToGroup}
+        getMasterAssets={getMasterAssets}
+        selectedIds={Array.from(selectedVersionIds)}
       />
     </Modal>
   );

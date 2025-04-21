@@ -7,9 +7,10 @@ interface AssetGridProps {
     selectedAssetIds: Set<number>; // Use the Set directly for checking selection
     onSelect: (assetId: number, isSelected: boolean) => void;
     onHistory: (masterId: number) => void;
+    addToGroup: (versionId: number, masterId: number) => Promise<{ success: boolean; error?: string }>;
 }
 
-const AssetGrid: React.FC<AssetGridProps> = ({ assets, selectedAssetIds, onSelect, onHistory }) => {
+const AssetGrid: React.FC<AssetGridProps> = ({ assets, selectedAssetIds, onSelect, onHistory, addToGroup }) => {
     return (
         // PRD §4.1 Library View: Grid View - Added items-start and content-start
         // Copied class list directly from LibraryView.tsx
@@ -21,6 +22,7 @@ const AssetGrid: React.FC<AssetGridProps> = ({ assets, selectedAssetIds, onSelec
                     isSelected={selectedAssetIds.has(asset.id)} // Check selection using the Set
                     onSelect={onSelect}
                     onHistory={onHistory}
+                    addToGroup={addToGroup}
                 />
             ))}
         </div>

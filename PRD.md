@@ -39,22 +39,21 @@ AdVault is a Windows desktop DAM built on Electron, designed to help copywriters
 2. **Local‑First Storage** (all assets remain on hard drive)  
 3. **Custom Sorting/Filtering** (by tags + adspower integer)  
 4. **Thumbnail & Preview Engine** (auto‑generate thumbnails/previews for images, video, PDFs)
+5. **Version Control & History** (Implemented as a field with pointer to master version)
 
 ### Nice‑to‑Have (Future)
-- Grouping/Collections  
+- Rapid Full‑Text Search (FTS5)  
 - Folder‑Mirror Resilience  
-- Version Control & History  
+- Scalability & Dynamic Custom Fields  
+- Automated Workflows  
 - AI‑Assisted Auto‑Tagging  
 - Multi‑Format Transcoding  
 - Usage Analytics  
 - Access Controls & Encryption  
 - Rights & License Management  
-- Scalability & Dynamic Custom Fields  
-- Integration APIs  
 - Governance & Audit Trails  
-- Automated Workflows  
-- Rapid Full‑Text Search (FTS5)  
 - Configurable Backup Scheduler
+- Integration APIs  
 
 ---
 

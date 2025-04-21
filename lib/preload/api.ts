@@ -31,4 +31,9 @@ const api = {
   promoteVersion: (payload: { versionId: number }) => ipcRenderer.invoke('promote-version', payload),
 }
 
+// Type definition for get-master-assets handler
+export type GetMasterAssetsFunc = (searchTerm?: string) => Promise<{ success: boolean; assets?: { id: number; fileName: string }[]; error?: string }>;
+
+// Type definition for open-file-dialog handler
+
 export default api

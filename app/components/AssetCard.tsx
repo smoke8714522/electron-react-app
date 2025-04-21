@@ -1,6 +1,33 @@
 import React from 'react';
-import { FiEye, FiClock, FiGitBranch } from 'react-icons/fi'; // Add necessary icons
+import { useDrag, useDrop, DropTargetMonitor } from 'react-dnd'; // Import DnD hooks
+import { FiEye, FiClock, FiGitBranch, FiInfo, FiTag, FiUser, FiAward, FiGitMerge, FiDatabase, FiCalendar } from 'react-icons/fi'; // Add necessary icons
 import { AssetWithThumbnail } from '../hooks/useAssets'; // Corrected import path
+
+// Define the type for the draggable item
+const ItemTypes = {
+  ASSET: 'asset',
+};
+
+// --- Helper Functions (Copied from App.tsx) ---
+function formatBytes(bytes: number, decimals = 2): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
+
+function formatDate(dateString: string | null | undefined): string {
+  if (!dateString) return 'N/A';
+  try {
+    const date = new Date(dateString);
+    return date.toLocaleDateString(); // Or customize format as needed
+  } catch (error) {
+    return 'Invalid Date';
+  }
+}
+// --- End Helper Functions ---
 
 // Copied directly from LibraryView.tsx
 interface AssetCardProps {
@@ -8,11 +35,60 @@ interface AssetCardProps {
     isSelected: boolean;
     onSelect: (assetId: number, isSelected: boolean) => void;
     onHistory: (masterId: number) => void; // Prop for history action
+    addToGroup: (versionId: number, masterId: number) => Promise<{ success: boolean; error?: string }>; // Add addToGroup prop
 }
 
 // PRD §4.1 Library View: Asset card component
 // Wrapped with React.memo as requested
-const AssetCard: React.FC<AssetCardProps> = React.memo(({ asset, isSelected, onSelect, onHistory }) => {
+const AssetCard: React.FC<AssetCardProps> = React.memo(({ asset, isSelected, onSelect, onHistory, addToGroup }) => {
+    // --- Drag Source --- 
+    const [{ isDragging }, dragRef] = useDrag(() => ({
+        type: ItemTypes.ASSET,
+        item: { id: asset.id }, // Pass the asset ID being dragged
+        collect: (monitor) => ({
+            isDragging: !!monitor.isDragging(),
+        }),
+    }), [asset.id]);
+
+    // --- Drop Target (only for Master assets) ---
+    const [{ isOver, canDrop }, dropRef] = useDrop(() => ({
+        accept: ItemTypes.ASSET,
+        canDrop: (item: { id: number }) => asset.master_id === null && item.id !== asset.id, // Can drop only on masters, not on self
+        drop: async (item: { id: number }) => { 
+            // item.id is the dragged asset (potential version)
+            // asset.id is the target asset (must be master)
+            console.log(`Dropping asset ${item.id} onto master ${asset.id}`);
+            if (asset.master_id === null && item.id !== asset.id) {
+                try {
+                    const result = await addToGroup(item.id, asset.id);
+                    if (!result.success) {
+                        console.error(`Failed to group asset ${item.id} under ${asset.id}:`, result.error);
+                        // TODO: Show user feedback (e.g., toast notification)
+                    } else {
+                        console.log(`Successfully grouped asset ${item.id} under ${asset.id}`);
+                        // Refresh is handled by useAssets hook after addToGroup call
+                    }
+                } catch (error) {
+                    console.error(`Error calling addToGroup for ${item.id} -> ${asset.id}:`, error);
+                    // TODO: Show user feedback
+                }
+            }
+        },
+        collect: (monitor) => ({
+            isOver: !!monitor.isOver(),
+            canDrop: !!monitor.canDrop(),
+        }),
+    }), [asset.id, asset.master_id, addToGroup]); // Dependencies
+
+    // Combine refs: dragRef first, then dropRef
+    const combinedRef = (node: HTMLDivElement | null) => {
+        dragRef(node);
+        // Only attach dropRef if it's a potential drop target
+        if (asset.master_id === null) {
+            dropRef(node);
+        }
+    };
+
     const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         // Stop propagation to prevent card click when clicking checkbox
         e.stopPropagation();
@@ -38,11 +114,16 @@ const AssetCard: React.FC<AssetCardProps> = React.memo(({ asset, isSelected, onS
     const displaySharesFormatted = displayShares?.toLocaleString() ?? '-';
     const sharesLabel = "Shares"; // Always use "Shares"
 
+    // Conditional styling for drop target
+    const cardClasses = `
+        bg-gray-800 rounded-lg overflow-hidden shadow-lg cursor-pointer transition-all duration-200 ease-in-out relative group border ${isSelected ? 'border-blue-500 ring-2 ring-blue-500/50' : 'border-gray-700 hover:border-gray-600 hover:shadow-blue-900/30'}
+        ${isDragging ? 'opacity-50' : 'opacity-100'} 
+        ${canDrop && isOver ? 'border-green-500 border-dashed' : ''} 
+        ${canDrop && !isOver ? (asset.master_id === null ? 'border-gray-600 border-dashed' : '') : ''}
+    `;
+
     return (
-        <div
-            className={`bg-gray-800 rounded-lg overflow-hidden shadow-lg cursor-pointer transition-all duration-200 ease-in-out relative group border ${isSelected ? 'border-blue-500 ring-2 ring-blue-500/50' : 'border-gray-700 hover:border-gray-600 hover:shadow-blue-900/30'}`}
-            onClick={handleCardClick}
-        >
+        <div ref={combinedRef} className={cardClasses} onClick={handleCardClick} title={asset.fileName}>
             {/* Selection Checkbox - Positioned top-left */}
             <input
                 type="checkbox"

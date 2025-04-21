@@ -2,6 +2,8 @@
 
 This document provides an overview of the codebase structure, key components, and implementation details for the Ad-Vault application, forked from `guasam/electron-react-app`.
 
+*Updated: 2024-07-29* <!-- Update Date -->
+
 ## Directory Structure
 
 The project follows a structure separating the Electron main process, the React renderer process, and potentially shared code (though the `shared/` directory was not found in this specific fork).
@@ -9,7 +11,7 @@ The project follows a structure separating the Electron main process, the React 
 ```
 /
 ├── app/                  # React Renderer Source Code
-│   ├── components/       # React Components (e.g., App.tsx, LibraryView.tsx, BulkEditModal.tsx, SidebarFilters.tsx)
+│   ├── components/       # React Components (e.g., App.tsx, LibraryView.tsx, BulkEditModal.tsx, SidebarFilters.tsx, VersionHistoryModal.tsx, BulkGroupModal.tsx, AssetCard.tsx, AssetList.tsx, AssetListRow.tsx)
 │   ├── hooks/            # React Hooks (e.g., useAssets.ts)
 │   ├── services/         # Renderer-specific services (if any)
 │   ├── styles/           # CSS Styles (app.css, tailwind.css)
@@ -52,6 +54,7 @@ The project follows a structure separating the Electron main process, the React 
     *   Defines IPC handlers for communication with the renderer process.
     *   Sets the vault root directory to `/vault/` within the project root.
     *   Handles file copying, metadata extraction, and thumbnail generation triggers.
+    *   IPC handlers, including `get-master-assets` for bulk grouping dropdown.
 *   **Database Schema**: `main/schema.ts`
     *   Defines the `Asset` TypeScript interface. Fields include: `id`, `fileName`, `filePath`, `mimeType`, `size`, `createdAt`, `year`, `advertiser`, `niche`, `shares` (renamed from `adspower`, now `INTEGER`), `master_id`, `version_no`. **Note:** This interface (and related interfaces like `AssetWithThumbnail`) are extended in other parts of the code (e.g., `lib/main/main.ts`, `app/hooks/useAssets.ts`) to include calculated fields like `versionCount` and `accumulatedShares` returned by the `get-assets` handler.
     *   Defines the `CustomField` TypeScript interface.
@@ -62,12 +65,27 @@ The project follows a structure separating the Electron main process, the React 
     *   Database migrations handle schema changes via `PRAGMA user_version`.
     *   `get-assets` IPC handler uses `LEFT JOIN` and `GROUP BY a.id` to calculate `accumulatedShares` and `versionCount` for master assets (`WHERE a.master_id IS NULL`).
     *   **UI Implications**: `LibraryView.tsx` displays only master assets. `AssetCard.tsx` shows `versionCount` badge and conditional `accumulatedShares` value. `AssetList.tsx` shows `accumulatedShares`. History buttons trigger `VersionHistoryModal.tsx`.
+    *   `add-to-group` IPC handler used for drag-and-drop and bulk grouping.
+*   **Drag-and-Drop & Bulk Grouping** (New Section):
+    *   **Implementation**: Uses `react-dnd` and `react-dnd-html5-backend`.
+    *   **Provider**: `<DndProvider>` wraps the application in `app/components/App.tsx`.
+    *   **Draggable Items**: `AssetCard.tsx` and `AssetListRow.tsx` implement `useDrag` (item type: `'ASSET'`, item data: `{ id: number }`).
+    *   **Drop Targets**: `AssetCard.tsx` implements `useDrop` for master assets (`asset.master_id === null`). It accepts `'ASSET'`, checks `canDrop` (not self), and calls the `addToGroup` prop on `drop`.
+    *   **Bulk Grouping**: 
+        *   A "Group under..." button (<FiPlusSquare>) appears in the `LibraryView.tsx` toolbar when multiple assets are selected.
+        *   Opens `BulkGroupModal.tsx`.
+    *   **Bulk Group Modal** (`app/components/BulkGroupModal.tsx` - New):
+        *   Props: `isOpen`, `onClose`, `onSave` (calls `bulkAddToGroup`), `getMasterAssets`, `selectedIds`.
+        *   Fetches potential master assets using `getMasterAssets`, excluding already selected assets.
+        *   Provides a searchable (debounced input) and selectable list (`<select>`) of master assets.
+        *   On confirm, calls the `onSave` prop (`bulkAddToGroup`) with the list of `selectedIds` and the chosen `masterId`.
 *   **Version History Modal** (`app/components/VersionHistoryModal.tsx`):
     *   Props: `{ masterId: number | null; isOpen: boolean; onClose: () => void }` plus various action handlers passed from `LibraryView.tsx` via `useAssets` hook (e.g., `getVersions`, `createVersion`, `deleteAsset`, etc.).
     *   Fetches versions using `getVersions`. Displays in a table (Checkbox, Preview, Filename, Type, Size, Created, Year, Advertiser, Niche, Shares, Version).
     *   Supports multi-select and footer actions (Add Version, Promote Selected, Remove From Group, Bulk Edit, Delete Selected) with appropriate confirmations and disabled states.
     *   Applies dark mode styling (`bg-gray-900`, etc.)
     *   Refreshes its own data and triggers main library refresh (`fetchAssets`) after successful actions.
+    *   Receives additional props (`getVersions`, `createVersion`, `deleteAsset`, `bulkUpdateAssets`, `addToGroup`, `removeFromGroup`, `promoteVersion`, `getMasterAssets`, `bulkAddToGroup`, `fetchAssets`) to manage versions and potentially trigger nested bulk actions (though bulk group within history might be disabled/re-evaluated).
 *   **Thumbnail Service**: `lib/main/ThumbnailService.ts`
     *   Generates thumbnails using `sharp` (images), `ffmpeg-static` (videos), `magick` CLI + Ghostscript (PDFs).
     *   Saves to `public/cache/thumbnails/<asset-id>.jpg`.
@@ -83,6 +101,8 @@ The project follows a structure separating the Electron main process, the React 
     *   `add-to-group`: Sets `master_id` and `version_no` on an existing master asset to make it a version of another master. Returns `Promise<{ success, error? }>`. 
     *   `remove-from-group`: Sets `master_id = NULL`, `version_no = 1` on a version asset, making it a master again. Returns `Promise<{ success, error? }>`. 
     *   `promote-version`: **Stub handler.** Returns `Promise<{ success: true }>`. 
+    *   `get-master-assets`: (New) Fetches master assets (`id`, `fileName`) for bulk grouping, optionally filtering by `fileName`.
+    *   `add-to-group`: Sets `master_id` and `version_no`. Used by DnD drop and `bulkAddToGroup` hook.
 *   **Electron Preload Script**: `lib/preload/preload.ts` (with helpers in `lib/preload/api.ts`)
     *   Exposes `window.api` with typed methods (e.g., `api.getAssets`, `api.createAsset`) and a generic `invoke`.
 *   **React App Entry**: `app/renderer.tsx`
@@ -90,6 +110,8 @@ The project follows a structure separating the Electron main process, the React 
 *   **Main React Component**: `app/components/App.tsx`
     *   Top-level UI, Tailwind CSS, Flexbox for edge-to-edge layout.
     *   Simple top navigation bar to switch between 'Dashboard' (basic view) and 'Library' (`LibraryView`).
+    *   Wraps the app in `<DndProvider backend={HTML5Backend}>`.
+    *   Uses `useAssets` hook to provide state and functions as props to `LibraryView`.
 *   **Main Library View Component**: `app/components/LibraryView.tsx` (Refactored)
     *   Main view for browsing/managing assets, styled with Tailwind.
     *   Uses `useAssets` hook for state management and actions.
@@ -101,6 +123,9 @@ The project follows a structure separating the Electron main process, the React 
     *   Manages asset selection state (`selectedAssetIds`) and controls visibility of `BulkEditModal` and `VersionHistoryModal`.
     *   Manages filter state (`filters`), sort state (`sort`), and search term state (`searchTerm`). Passes these and relevant handlers down to `SidebarFilters` and other child components.
     *   Filtering/sorting changes trigger re-fetch via `useEffect` calling `fetchAssets`.
+    *   Toolbar includes conditional "Group under..." button triggering `BulkGroupModal`.
+    *   Manages modal states (`isBulkEditModalOpen`, `isBulkGroupModalOpen`, `isHistoryModalOpen`).
+    *   Passes `addToGroup`, `getMasterAssets`, `bulkAddToGroup` and other necessary functions down to child components/modals (`AssetGrid`, `AssetList`, `BulkGroupModal`, `VersionHistoryModal`).
 *   **Sidebar Filters Component**: `app/components/SidebarFilters.tsx` (New)
     *   **Purpose**: Contains the filter controls previously inline within `LibraryView.tsx`'s sidebar.
     *   **Location**: `app/components/SidebarFilters.tsx`
@@ -118,20 +143,34 @@ The project follows a structure separating the Electron main process, the React 
     *   Renders a responsive Tailwind CSS grid.
     *   Maps `assets` prop to `AssetCard` components.
     *   Passes `onSelect` and `onHistory` handlers down.
+    *   Passes `addToGroup` prop down to `AssetCard`.
 *   **Asset List Component**: `app/components/AssetList.tsx` (New)
     *   Renders a `<table>` with sticky `<thead>`.
     *   Headers include sort icons/handlers and select-all checkbox.
     *   Maps `assets` prop to `AssetListRow` components.
+    *   Passes correct sort props (`sort`, `onSort`) and selection props (`onSelectAll`).
+    *   Does *not* pass `addToGroup` to `AssetListRow`.
 *   **Asset Card Component**: `app/components/AssetCard.tsx` (New)
     *   Displays single asset in grid. Thumbnail, metadata, conditional shares/accumulated shares, version count badge, history button, selection checkbox.
     *   Uses HTML `title` for hover details.
+    *   Implements `useDrag` (source).
+    *   Implements `useDrop` (target, only if master) calling `addToGroup`.
+    *   Includes visual feedback for dragging and dropping states.
+    *   Defines `formatBytes`, `formatDate` locally (consider extracting).
 *   **Asset List Row Component**: `app/components/AssetListRow.tsx` (New)
     *   Renders a single `<tr>` for the list view.
     *   Includes cells for checkbox, thumbnail, metadata, shares, history button.
+    *   Implements `useDrag` (source only).
+    *   Defines `formatBytes`, `formatDate` locally (consider extracting).
 *   **Bulk Edit Modal Component**: `app/components/BulkEditModal.tsx` (New)
     *   `react-modal` dialog for batch editing (`year`, `advertiser`, `niche`, `shares`).
     *   Uses "Apply" checkboxes for selective updates.
     *   Props: `isOpen`, `onClose`, `onSave`, `selectedCount`.
+*   **Bulk Group Modal Component** (`app/components/BulkGroupModal.tsx`) (New):
+    *   `react-modal` dialog for selecting a master asset.
+    *   Uses `getMasterAssets` prop to populate a searchable select list.
+    *   Calls `onSave` (hook's `bulkAddToGroup`) on confirmation.
+    *   Includes local `useDebounce` hook (consider extracting).
 *   **React State Management (Assets)**: `app/hooks/useAssets.ts`
     *   Custom hook (`useAssets`) manages asset list (`AssetWithThumbnail[]`), loading, and error states.
     *   Provides functions (`fetchAssets`, `bulkImportAssets`, `updateAsset`, `deleteAsset`, `bulkUpdateAssets`, `createVersion`, `getVersions`, `addToGroup`, `removeFromGroup`, `promoteVersion`) invoking IPC handlers.
@@ -139,6 +178,10 @@ The project follows a structure separating the Electron main process, the React 
         *   `updateAsset`, `bulkUpdateAssets`: Handle data conversion (e.g., `number | null`) before IPC.
         *   Mutation functions (e.g., `deleteAsset`, `createVersion`, `bulkUpdateAssets`) now trigger `fetchAssets` internally after successful IPC calls to refresh the UI automatically.
     *   Defines types: `Asset`, `AssetWithThumbnail`, `EditableAssetFields`, `BulkUpdatePayload`, `FetchFilters`, `FetchSort`, result types for IPC calls. `FetchFilters` uses `sharesRange: [number | null, number | null]`. `FetchSort` includes `accumulatedShares`.
+    *   Provides `getMasterAssets` function (calls `get-master-assets` IPC).
+    *   Provides `bulkAddToGroup` function (loops calls to `add-to-group` IPC). Calls `fetchAssets` on completion.
+    *   `addToGroup` function now calls `fetchAssets` on success.
+    *   Defines `MasterAssetOption` type.
 
 ## Implementation Notes
 
@@ -154,4 +197,9 @@ The project follows a structure separating the Electron main process, the React 
 *   **Error Handling**: Basic handling in hooks/IPCs. Batch operations return error details.
 *   **Dependencies**: `electron`, `react`, `better-sqlite3`, `react-icons`, `react-tooltip`, `react-modal`, etc. External tools for some thumbnails.
 *   **Type Definitions**: `app/index.d.ts` defines `ElectronAPI`. `useAssets.ts` defines core data types.
-*   **Tooltips**: Previously used `react-tooltip` in `AssetCard` but removed due to layout issues; now uses native `title` attribute. Other components like `VersionHistoryModal` still use `react-tooltip`. 
+*   **Tooltips**: Previously used `react-tooltip` in `AssetCard` but removed due to layout issues; now uses native `title` attribute. Other components like `VersionHistoryModal` still use `react-tooltip`.
+*   **Grouping**: 
+    *   Drag-and-drop: Implemented via `react-dnd` in `AssetCard` (source/target) and `AssetListRow` (source). `addToGroup` hook called on drop.
+    *   Bulk: Implemented via `BulkGroupModal` triggered from `LibraryView` toolbar. `bulkAddToGroup` hook called on save.
+*   **Helper Functions**: `formatBytes`, `formatDate`, and `useDebounce` are currently defined locally in components where used (`AssetCard`, `AssetListRow`, `BulkGroupModal`). Consider extracting to a shared `app/utils` directory.
+*   **Type Safety**: `index.d.ts` defines the `ExposedApi` interface for `window.api`.

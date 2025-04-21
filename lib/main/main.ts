@@ -667,6 +667,27 @@ app.whenReady().then(() => {
       return tx(); 
   });
 
+  // New Handler to get only master assets, optionally filtered by name
+  ipcMain.handle('get-master-assets', async (_, searchTerm?: string): Promise<{ success: boolean; assets?: Asset[]; error?: string }> => {
+    try {
+      let query = `SELECT id, fileName FROM assets WHERE master_id IS NULL`
+      const queryParams: any[] = []
+
+      if (searchTerm) {
+        query += ` AND fileName LIKE ?`
+        queryParams.push(`%${searchTerm}%`)
+      }
+
+      query += ` ORDER BY fileName ASC`
+
+      const assets = db.prepare(query).all(...queryParams) as Asset[]
+      return { success: true, assets }
+    } catch (error: any) {
+      console.error('Failed to get master assets:', error)
+      return { success: false, error: error.message }
+    }
+  })
+
   // --- App Lifecycle ---
   // <<< Closing bracket for app.whenReady().then(...)
 }); // <<< Added closing parenthesis and bracket for app.whenReady()

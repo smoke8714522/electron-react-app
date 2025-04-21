@@ -1,11 +1,13 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-// Import necessary types directly
-import { AssetWithThumbnail, FetchFilters, FetchSort, BulkUpdatePayload, BulkImportResult, BatchUpdateResult } from '../hooks/useAssets';
+// Import necessary types directly, including new function types
+import { 
+    AssetWithThumbnail, FetchFilters, FetchSort, BulkUpdatePayload, BulkImportResult, BatchUpdateResult, 
+    MasterAssetOption // Import MasterAssetOption for getMasterAssets return type
+} from '../hooks/useAssets';
 // Assuming react-icons is installed
 import { 
     FiFilter, FiRefreshCw, FiGrid, FiList, FiChevronLeft, FiChevronRight, FiUploadCloud, 
-    FiTrash2, FiEdit
-    // Removed unused icons: FiSearch, FiTag, FiCalendar, FiUser, FiAward, FiShare2, FiChevronDown, FiChevronUp
+    FiTrash2, FiEdit, FiGitMerge, FiPlusSquare // Add FiPlusSquare for Grouping
 } from 'react-icons/fi';
 // Import child components
 import AssetGrid from './AssetGrid';
@@ -14,6 +16,7 @@ import BulkEditModal from './BulkEditModal';
 import { VersionHistoryModal } from './VersionHistoryModal';
 import { Tooltip } from 'react-tooltip';
 import SidebarFilters from './SidebarFilters';
+import BulkGroupModal from './BulkGroupModal'; // Import the new modal
 
 // Define available sort options for the dropdown
 const sortOptions: { label: string; value: FetchSort }[] = [
@@ -32,20 +35,30 @@ const sortOptions: { label: string; value: FetchSort }[] = [
 // Type for sortable columns in the list view header
 type SortableColumn = Extract<FetchSort['sortBy'], 'fileName' | 'year' | 'shares' | 'accumulatedShares' | 'createdAt'>;
 
-// Define props expected by LibraryView
+// Define props expected by LibraryView, including new functions
 interface LibraryViewProps {
     assets: AssetWithThumbnail[];
     loading: boolean;
     error: string | null;
-    bulkImportAssets: () => Promise<BulkImportResult>;
+    // Existing functions
+    bulkImportAssets: () => Promise<BulkImportResult>; 
     fetchAssets: (filters?: FetchFilters, sort?: FetchSort) => Promise<void>; 
     deleteAsset: (id: number) => Promise<boolean>;
     bulkUpdateAssets: (selectedIds: number[], updates: BulkUpdatePayload) => Promise<BatchUpdateResult>;
+    // Add functions from useAssets needed for DnD, VersionHistoryModal, and BulkGroupModal
+    addToGroup: (versionId: number, masterId: number) => Promise<{ success: boolean; error?: string | undefined }>;
+    getVersions: (masterId: number) => Promise<{ success: boolean; assets?: AssetWithThumbnail[] | undefined; error?: string | undefined }>;
+    createVersion: (payload: { masterId: number; sourcePath: string; }) => Promise<{ success: boolean; newId?: number | undefined; error?: string | undefined }>;
+    removeFromGroup: (payload: { versionId: number; }) => Promise<{ success: boolean; error?: string | undefined }>;
+    promoteVersion: (payload: { versionId: number; }) => Promise<{ success: boolean; error?: string | undefined }>;
+    getMasterAssets: (searchTerm?: string | undefined) => Promise<MasterAssetOption[]>; // Use MasterAssetOption type
+    bulkAddToGroup: (versionIds: number[], masterId: number) => Promise<{ success: boolean; errors: { id: number; error: string; }[]; }>;
 }
 
 
 // LibraryView Component: Main interface for browsing assets
 const LibraryView: React.FC<LibraryViewProps> = ({
+    // Destructure all props, including new ones
     assets, 
     loading, 
     error, 
@@ -53,6 +66,13 @@ const LibraryView: React.FC<LibraryViewProps> = ({
     fetchAssets,
     deleteAsset,
     bulkUpdateAssets,
+    addToGroup, // Add to destructuring
+    getVersions, // Add to destructuring
+    createVersion, // Add to destructuring
+    removeFromGroup, // Add to destructuring
+    promoteVersion, // Add to destructuring
+    getMasterAssets, // Add to destructuring
+    bulkAddToGroup, // Add to destructuring
 }) => {
 
     // --- State Management ---
@@ -62,6 +82,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
     const [historyMasterId, setHistoryMasterId] = useState<number | null>(null);
+    const [isBulkGroupModalOpen, setIsBulkGroupModalOpen] = useState(false);
 
     // Filter and Sort State (Consolidated)
     const [searchTerm, setSearchTerm] = useState<string>(''); 
@@ -216,32 +237,19 @@ const LibraryView: React.FC<LibraryViewProps> = ({
     };
 
     // Handle opening the bulk edit modal
-    const handleOpenBulkEditModal = () => {
-        if (selectedAssetIds.size > 0) {
-            setIsBulkEditModalOpen(true);
-        }
-    };
-    
-    // Handle saving from the bulk edit modal
+    const handleOpenBulkEditModal = () => setIsBulkEditModalOpen(true);
+    const handleCloseBulkEditModal = () => setIsBulkEditModalOpen(false);
     const handleBulkUpdateSave = async (updates: BulkUpdatePayload) => {
         const idsToUpdate = Array.from(selectedAssetIds);
-        if (idsToUpdate.length === 0) return; 
-        try {
-            const result = await bulkUpdateAssets(idsToUpdate, updates); // Use passed-in prop
-            console.log('Bulk update result:', result);
-            if (result.success) {
-                alert(`Successfully updated ${result.updatedCount} asset(s).`);
-            } else {
-                alert(`Bulk update completed with ${result.errors.length} error(s). Updated ${result.updatedCount} asset(s). Check console.`);
-                result.errors.forEach(e => console.error(`Update Error (ID: ${e.id}): ${e.error}`));
-            }
-            setSelectedAssetIds(new Set()); 
-            setIsBulkEditModalOpen(false); 
-             // Consider if fetchAssets() is needed here or if bulkUpdateAssets handles refresh
-             await fetchAssets(); // Call fetchAssets passed via props if needed
-        } catch (err: any) {
-            console.error('Failed to execute bulk update:', err);
-            alert(`An unexpected error occurred during bulk update: ${err.message || 'Unknown error'}`);
+        console.log(`Bulk updating ${idsToUpdate.length} assets:`, updates);
+        const result = await bulkUpdateAssets(idsToUpdate, updates);
+        if (result.success) {
+            console.log('Bulk update successful.');
+            setIsBulkEditModalOpen(false);
+            setSelectedAssetIds(new Set()); // Clear selection after successful bulk update
+        } else {
+            console.error('Bulk update failed:', result.errors);
+            // TODO: Show error feedback to user in the modal
         }
     };
 
@@ -265,6 +273,28 @@ const LibraryView: React.FC<LibraryViewProps> = ({
         setHistoryMasterId(null);
         // Consider if refresh is needed: fetchAssets();
     }, []);
+
+    // Add handlers for BulkGroupModal
+    const handleOpenBulkGroupModal = () => {
+        if (selectedAssetIds.size > 0) { // Only open if assets are selected
+            setIsBulkGroupModalOpen(true);
+        }
+    };
+    const handleCloseBulkGroupModal = () => {
+        setIsBulkGroupModalOpen(false);
+    };
+
+    // Filter assets based on search term (client-side for now)
+    const filteredAssets = useMemo(() => {
+        if (!searchTerm) {
+            return assets;
+        }
+        return assets.filter(asset => 
+            asset.fileName.toLowerCase().includes(searchTerm.toLowerCase())
+            || asset.advertiser?.toLowerCase().includes(searchTerm.toLowerCase())
+            || asset.niche?.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }, [assets, searchTerm]);
 
     // Loading/Error states
     if (loading && assets.length === 0) return <div className="flex justify-center items-center h-full text-gray-400">Loading assets...</div>;
@@ -348,6 +378,15 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                                          <span>Edit Metadata</span>
                                  </button>
                                  <button 
+                                     onClick={handleOpenBulkGroupModal}
+                                         className="px-2 py-1 bg-purple-500 hover:bg-purple-600 rounded text-white text-xs font-semibold flex items-center space-x-1 transition duration-150 ease-in-out"
+                                         title="Group selected assets under a master asset"
+                                         data-tooltip-id="library-tooltip" data-tooltip-content="Group Selected Assets"
+                                 >
+                                         <FiPlusSquare size={14} />
+                                         <span>Group under...</span>
+                                 </button>
+                                 <button 
                                      onClick={handleBatchDelete}
                                          className="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-xs font-semibold flex items-center space-x-1 transition duration-150 ease-in-out"
                                          title="Delete selected assets"
@@ -421,21 +460,23 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                     {assets.length > 0 && (
                         viewMode === 'grid' ? (
                             <AssetGrid 
-                                assets={assets} 
+                                assets={filteredAssets} 
                                 selectedAssetIds={selectedAssetIds} 
                                 onSelect={handleSelectAsset} 
                                 onHistory={handleOpenHistoryModal} 
+                                addToGroup={addToGroup}
                             />
                         ) : (
                             <AssetList 
-                                assets={assets} 
+                                assets={filteredAssets} 
                                 selectedAssetIds={selectedAssetIds} 
                                 onSelect={handleSelectAsset} 
-                                onHistory={handleOpenHistoryModal}
-                                sortConfig={sort} // Pass sortConfig instead of currentSort
-                                handleSort={handleColumnSort} // Pass the new handler
-                                handleSelectAll={handleSelectAll}
+                                onSelectAll={handleSelectAll}
                                 isAllSelected={isAllSelected}
+                                onHistory={handleOpenHistoryModal}
+                                sort={sort}
+                                onSort={handleColumnSort}
+                                addToGroup={addToGroup}
                             />
                         )
                     )}
@@ -446,7 +487,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({
             {isBulkEditModalOpen && (
                 <BulkEditModal
                     isOpen={isBulkEditModalOpen}
-                    onClose={() => setIsBulkEditModalOpen(false)}
+                    onClose={handleCloseBulkEditModal}
                     onSave={handleBulkUpdateSave}
                     selectedCount={selectedAssetIds.size}
                 />
@@ -461,6 +502,26 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                     masterId={historyMasterId}
                     isOpen={isHistoryModalOpen}
                     onClose={handleCloseHistoryModal}
+                    getVersions={getVersions}
+                    createVersion={createVersion}
+                    deleteAsset={deleteAsset}
+                    updateAsset={() => Promise.resolve(false)}
+                    bulkUpdateAssets={bulkUpdateAssets}
+                    addToGroup={addToGroup}
+                    removeFromGroup={removeFromGroup}
+                    promoteVersion={promoteVersion}
+                    fetchAssets={fetchAssets}
+                />
+            )}
+
+            {/* Render BulkGroupModal (Uncommented) */}
+            {isBulkGroupModalOpen && (
+                <BulkGroupModal
+                    isOpen={isBulkGroupModalOpen}
+                    onClose={handleCloseBulkGroupModal}
+                    onSave={bulkAddToGroup} // Pass the function directly
+                    getMasterAssets={getMasterAssets}
+                    selectedIds={Array.from(selectedAssetIds)}
                 />
             )}
 

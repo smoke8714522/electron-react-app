@@ -9,33 +9,33 @@ type SortableColumn = Extract<FetchSort['sortBy'], 'fileName' | 'year' | 'shares
 interface AssetListProps {
     assets: AssetWithThumbnail[];
     selectedAssetIds: Set<number>;
-    onSelect: (assetId: number, isSelected: boolean) => void;
-    onHistory: (masterId: number) => void;
-    // Adjust sortConfig to allow potentially undefined sort (though LibraryView provides defaults)
-    sortConfig: { sortBy?: SortableColumn; sortOrder?: FetchSort['sortOrder'] }; 
-    // Ensure handleSort expects a defined SortableColumn as passed by LibraryView
-    handleSort: (sortByValue: SortableColumn) => void; 
-    handleSelectAll: (isSelected: boolean) => void;
+    onSelect: (id: number, selected: boolean) => void;
+    onSelectAll: (isSelected: boolean) => void;
     isAllSelected: boolean;
+    onHistory: (masterId: number) => void;
+    sort: FetchSort;
+    onSort: (column: SortableColumn) => void;
+    addToGroup: (versionId: number, masterId: number) => Promise<{ success: boolean; error?: string }>;
 }
 
 const AssetList: React.FC<AssetListProps> = ({ 
     assets, 
     selectedAssetIds, 
     onSelect, 
+    onSelectAll, 
+    isAllSelected, 
     onHistory, 
-    sortConfig, 
-    handleSort, 
-    handleSelectAll,
-    isAllSelected
+    sort, 
+    onSort,
+    addToGroup
 }) => {
 
     // Helper to render sort icons
     const renderSortIcon = (column: SortableColumn) => {
-        if (sortConfig.sortBy !== column) {
+        if (sort.sortBy !== column) {
             return null; // No icon if not the currently sorted column
         }
-        return sortConfig.sortOrder === 'ASC' ? <FiChevronUp className="inline ml-1" /> : <FiChevronDown className="inline ml-1" />;
+        return sort.sortOrder === 'ASC' ? <FiChevronUp className="inline ml-1" /> : <FiChevronDown className="inline ml-1" />;
     };
 
     // Helper to create sortable table header
@@ -43,7 +43,7 @@ const AssetList: React.FC<AssetListProps> = ({
         <th 
             scope="col" 
             className={`px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider cursor-pointer ${className || ''}`}
-            onClick={() => handleSort(column)}
+            onClick={() => onSort(column)}
         >
             {label}
             {renderSortIcon(column)}
@@ -51,8 +51,8 @@ const AssetList: React.FC<AssetListProps> = ({
     );
 
     return (
-        <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-700">
+        <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
+            <table className="min-w-full divide-y divide-gray-700 table-fixed">
                 <thead className="bg-gray-800 sticky top-0 z-10">
                     <tr>
                         <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-10">
@@ -60,7 +60,7 @@ const AssetList: React.FC<AssetListProps> = ({
                                 type="checkbox" 
                                 className="rounded"
                                 checked={isAllSelected} 
-                                onChange={(e) => handleSelectAll(e.target.checked)}
+                                onChange={(e) => onSelectAll(e.target.checked)}
                                 aria-label="Select all assets"
                             />
                         </th>
@@ -75,14 +75,14 @@ const AssetList: React.FC<AssetListProps> = ({
                         <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
                     </tr>
                 </thead>
-                <tbody className="bg-gray-850 divide-y divide-gray-700">
-                    {assets.map(asset => (
-                        <AssetListRow 
-                            key={asset.id} 
-                            asset={asset} 
-                            isSelected={selectedAssetIds.has(asset.id)} 
-                            onSelect={onSelect} 
-                            onHistory={onHistory} 
+                <tbody className="bg-gray-800 divide-y divide-gray-700">
+                    {assets.map((asset) => (
+                        <AssetListRow
+                            key={asset.id}
+                            asset={asset}
+                            isSelected={selectedAssetIds.has(asset.id)}
+                            onSelect={onSelect}
+                            onHistory={onHistory}
                         />
                     ))}
                 </tbody>
