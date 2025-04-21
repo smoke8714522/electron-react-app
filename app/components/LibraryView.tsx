@@ -582,9 +582,6 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                 onClose={handleCloseHistoryModal} // Pass the close handler
             />
 
-            {/* Tooltip for Asset Card items */}
-            <Tooltip id="asset-card-tooltip" place="top" />
-
             {/* Tooltip component definitions */}
             <Tooltip id="accumulated-shares-tooltip" place="top" />
         </div>
@@ -646,8 +643,7 @@ const AssetCard: React.FC<AssetCardProps> = ({ asset, isSelected, onSelect, onHi
                  {/* Step 3: Always display version count badge, showing 'v1' if no versions */}
                  <span
                     className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium shadow ${hasVersions ? 'bg-teal-600 text-teal-100' : 'bg-gray-600 text-gray-200'}`}
-                    data-tooltip-id="asset-card-tooltip"
-                    data-tooltip-content={hasVersions ? `Versions: ${asset.versionCount}` : 'Master Asset (v1)'}
+                    title={hasVersions ? `Versions: ${asset.versionCount}` : 'Master Asset (v1)'}
                 >
                     <FiGitBranch className="mr-1" size={12}/>
                     {asset.versionCount ?? 1} {/* Show count, default to 1 */}
@@ -684,9 +680,7 @@ const AssetCard: React.FC<AssetCardProps> = ({ asset, isSelected, onSelect, onHi
                     {/* Display conditional shares value and label */}
                     <p
                         className="truncate"
-                        title={`${sharesLabel}: ${displaySharesFormatted}${hasVersions ? ' (Accumulated)' : ''}`}
-                        data-tooltip-id="asset-card-tooltip"
-                        data-tooltip-content={`${sharesLabel}: ${displaySharesFormatted}${hasVersions ? ' (Accumulated: Master + Versions)' : ''}`}
+                        title={`${sharesLabel}: ${displaySharesFormatted}${hasVersions ? ' (Accumulated: Master + Versions)' : ''}`}
                     >
                         {sharesLabel}: {displaySharesFormatted}
                     </p>

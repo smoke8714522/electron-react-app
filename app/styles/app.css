@@ -5,6 +5,9 @@ body {
   font-size: 14px;
   margin: 0;
   overflow: hidden;
+  height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 html,
@@ -14,3 +17,23 @@ body,
   margin: 0;
   line-height: 1.4;
 }
+
+#root {
+  height: 100%;
+  width: 100%;
+}
+
+/* Custom tooltip styles - REMOVED */
+/*
+.asset-card-custom-tooltip {
+  max-width: 250px; 
+  white-space: normal !important; 
+  word-wrap: break-word; 
+  z-index: 100 !important; 
+  padding: 4px 8px !important; 
+  font-size: 0.8rem !important; 
+  background-color: #333 !important; 
+  color: #fff !important; 
+  border-radius: 4px !important; 
+}
+*/
