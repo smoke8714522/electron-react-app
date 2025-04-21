@@ -298,22 +298,12 @@ app.whenReady().then(() => {
           });
 
           const newAssetId = info.lastInsertRowid;
-          if (typeof newAssetId !== 'number') throw new Error('Failed to get new asset ID.');
-          
-          const newAssetResult = db.prepare(`
-            SELECT a.*, a.shares + COALESCE((SELECT SUM(v.shares) FROM assets v WHERE v.master_id = a.id), 0) AS accumulatedShares
-            FROM assets a WHERE a.id = ? AND a.master_id IS NULL
-          `).get(newAssetId) as Asset;
+          if (typeof newAssetId !== 'number' && typeof newAssetId !== 'bigint') {
+               throw new Error('Failed to get ID of newly created asset.');
+          }
+          console.log(`✅ Asset ${newAssetId} created successfully from ${sourcePath}`);
+          return { success: true, asset: { id: newAssetId, thumbnailPath: null, accumulatedShares: null } };
 
-          if (!newAssetResult) throw new Error('Failed to retrieve new master asset.');
-
-          generateThumbnail(newAssetId, vaultFilePath).catch(err => console.error(`Thumbnail error for asset ${newAssetId}:`, err));
-          const thumbnailPath = await getExistingThumbnailPath(newAssetId);
-          
-          // Simplify check using nullish coalescing operator
-          const accumulatedSharesValue = (newAssetResult as any).accumulatedShares;
-          const finalAccumulatedShares = accumulatedSharesValue ?? null;
-          return { success: true, asset: { ...newAssetResult, accumulatedShares: finalAccumulatedShares, thumbnailPath } };
       } catch (error: any) {
           console.error('Error importing '+ sourcePath + ': ', error);
           return { success: false, error: error.message || 'Import failed' };
@@ -435,6 +425,13 @@ app.whenReady().then(() => {
       }
     }
     return { regeneratedCount };
+  });
+
+  // IPC handler for file open dialog
+  ipcMain.handle('open-file-dialog', async (event, options) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const result = await dialog.showOpenDialog(win, options);
+    return result;
   });
 
   // --- Versioning IPC Handlers ---

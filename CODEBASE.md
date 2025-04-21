@@ -79,7 +79,7 @@ The project follows a structure separating the Electron main process, the React 
             *   Table includes columns: Checkbox, Preview, Filename, Type, Size, Created, Year, Advertiser, Niche, Shares, Version (`vX`).
             *   Supports multi-select via checkboxes in the table header (select-all) and each row.
             *   Includes a **footer action bar** (`bg-gray-800`) with buttons:
-                *   **Add Version** (`<FiUploadCloud>`): Opens a file dialog; on selection, calls `createVersion(masterId, sourcePath)`. Disabled if `!masterId` or loading.
+                *   **Add Version** (`<FiUploadCloud>`): Uses `window.api.openFileDialog` to open a file dialog; on selection, calls `createVersion(masterId, sourcePath)`. Disabled if `!masterId` or loading.
                 *   **Promote Selected** (`<FiChevronsUp>`): Calls `promoteVersion(versionId)` after confirmation. Disabled unless exactly one version is selected.
                 *   **Remove From Group** (`<FiCornerUpLeft>`): Calls `removeFromGroup(versionId)` for each selected item after confirmation. Disabled unless at least one version is selected.
                 *   **Bulk Edit** (`<FiEdit>`): Opens the `BulkEditModal` component. Disabled unless at least one version is selected.
@@ -105,9 +105,9 @@ The project follows a structure separating the Electron main process, the React 
             *   An optional `thumbnailPath` (static `/cache/thumbnails/<asset-id>.jpg`) if cached.
             *   Ensures `shares` is `number | null`.
             *   A new calculated field `accumulatedShares: number | null`, representing the total shares of the master and all its versions.
-    *   `open-file-dialog`: Uses Electron's `dialog.showOpenDialog`.
+    *   `open-file-dialog`: Opens a file picker via Electron's `dialog.showOpenDialog`; returns `{ canceled: boolean, filePaths: string[] }`.
     *   `create-asset`: Takes a source file path, copies the file to the vault (using `path.win32` for relative DB path), generates unique name (hash-based), extracts metadata, inserts into `assets` table (setting `master_id` to `NULL` and `version_no` to `1` for new assets), and asynchronously triggers thumbnail generation. Returns `{ success: boolean, asset?: AssetWithThumbnail, error?: string }`. The returned asset includes `accumulatedShares` (which will initially just be the master's own shares).
-    *   `bulk-import-assets`: Opens a multi-select file dialog. For each valid file, performs the same actions as `create-asset` (creating new master assets). Returns `{ success: boolean, importedCount: number, assets?: AssetWithThumbnail[], errors: { file: string, error: string }[] }`.
+    *   `bulk-import-assets`: Opens a multi-select file dialog (using Electron's `dialog.showOpenDialog` internally). For each valid file, performs the same actions as `create-asset` (creating new master assets). Returns `{ success: boolean, importedCount: number, assets?: AssetWithThumbnail[], errors: { file: string, error: string }[] }`.
     *   `update-asset`: Takes `{ id: number, updates: { ... } }`. Updates `assets` (including `shares`) and `custom_fields` tables atomically. Ensures `shares` and `year` are stored as numbers or null. Returns `Promise<boolean>`. (Note: Currently updates only the specific asset record provided, not versions).
     *   `delete-asset`: Takes an asset ID (`number`). Deletes the asset record from the `assets` table (cascades to `custom_fields`), the corresponding file from the vault, and the cached thumbnail. Returns `Promise<boolean>`. (Note: Deleting a master asset *does not* currently delete its versions automatically; versions remain linked via `master_id` which might become invalid. Deleting a version only deletes that specific version).
     *   `create-version`: Takes `{ masterId: number, sourcePath: string }`. Checks `sourcePath` exists. Copies the file into the vault, generates a unique path. Fetches metadata from the specified `masterId` asset (ensuring it *is* a master). Determines the next available `version_no` for that master. Inserts a new `assets` record cloning the master's metadata (filename, year, advertiser, niche, shares) but with the new file path, size, mimeType, createdAt, the master's ID set in `master_id`, and the calculated `version_no`. File copy/metadata retrieval happens outside transaction, DB insert/version number calculation inside. Triggers thumbnail generation asynchronously for the new version asset. Returns `Promise<{ success: boolean, newId?: number, error?: string }>`.
@@ -117,7 +117,7 @@ The project follows a structure separating the Electron main process, the React 
     *   `promote-version`: Takes `{ versionId: number }`. **Stub handler that currently returns `{ success: true }`.** (Future implementation: Promote the specified version to be the new master of its group, potentially swapping data with the current master and updating `master_id` and `version_no` for other versions). The corresponding hook (`useAssets().promoteVersion`) calls this and refreshes the asset list.
 *   **Electron Preload Script**: `lib/preload/preload.ts` (with helpers in `lib/preload/api.ts`)
     *   Exposes a generic `api` object with an `invoke` method.
-    *   Also exposes specific typed methods for common IPC calls, including `createVersion`, `getVersions`, `addToGroup`, `removeFromGroup`.
+    *   Also exposes specific typed methods for many common IPC calls via the `api` object (e.g., `api.getAssets`, `api.createAsset`, `api.openFileDialog`, `api.createVersion`, `api.getVersions`, `api.addToGroup`, `api.removeFromGroup`, `api.promoteVersion`). Renderer code can use either the generic `invoke` or these specific, typed methods.
 *   **React App Entry**: `app/renderer.tsx`
     *   Renders the main React component (`App`).
 *   **Main React Component**: `app/components/App.tsx`

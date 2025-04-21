@@ -122,7 +122,7 @@ export const VersionHistoryModal: React.FC<VersionHistoryModalProps> = ({
     if (!masterId) return;
     try {
       // Provide the expected type to the invoke call
-      const filePathsResult = await window.electron.api.invoke<OpenDialogResult>('open-file-dialog', { properties: ['openFile'], title: 'Select File for New Version'});
+      const filePathsResult = await window.api.openFileDialog({ properties: ['openFile'], title: 'Select File for New Version'});
 
       // Check if window.electron.api exists before trying to use it
       // Note: This check is mainly for robustness; the root cause of the runtime error
