@@ -3,7 +3,7 @@ import path from 'node:path'
 import fs from 'node:fs/promises' // Use promises for async file operations
 import mime from 'mime-types'
 import Database from 'better-sqlite3'
-import { electronApp } from '@electron-toolkit/utils'
+import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { initializeDatabase, type Asset as BaseAsset } from '../../main/schema'
 import { generateThumbnail, getExistingThumbnailPath } from './ThumbnailService'
 import crypto from 'crypto'; // For generating unique names
@@ -223,35 +223,31 @@ app.whenReady().then(() => {
       });
 
       const newAssetId = info.lastInsertRowid;
-      if (typeof newAssetId !== 'number') {
+      if (typeof newAssetId !== 'number' && typeof newAssetId !== 'bigint') {
          throw new Error('Failed to get ID of newly created asset.');
       }
-
-      // Fetch the newly created asset to return it (includes accumulatedShares)
-      const newAssetResult = db.prepare(`
-        SELECT 
-          a.*,
-          a.shares + COALESCE((SELECT SUM(v.shares) FROM assets v WHERE v.master_id = a.id), 0) AS accumulatedShares
-        FROM assets a
-        WHERE a.id = ? AND a.master_id IS NULL
-      `).get(newAssetId) as Asset;
-
-      if (!newAssetResult) {
-        throw new Error('Failed to retrieve newly created master asset.');
-      }
-
-      // Generate thumbnail asynchronously (don't wait)
-      generateThumbnail(newAssetId, vaultFilePath).catch(err => {
-        console.error(`Failed to generate thumbnail for asset ${newAssetId}:`, err);
-      }); 
-      
-      const thumbnailPath = await getExistingThumbnailPath(newAssetId);
-      
-      // Simplify check using nullish coalescing operator
-      const accumulatedSharesValue = (newAssetResult as any).accumulatedShares;
-      const finalAccumulatedShares = accumulatedSharesValue ?? null;
-      console.log(`✅ Asset ${newAssetId} created successfully from ${sourcePath}`);
-      return { success: true, asset: { ...newAssetResult, accumulatedShares: finalAccumulatedShares, thumbnailPath } };
+      const numericAssetId = Number(newAssetId); // Convert to number
+      console.log(`✅ Asset ${numericAssetId} created successfully from ${sourcePath}`);
+      // Return the full AssetWithThumbnail object
+      return { 
+        success: true, 
+        asset: { 
+          id: numericAssetId, 
+          fileName: originalFileName, 
+          filePath: relativeVaultPath, 
+          mimeType: mimeType, 
+          size: stats.size, 
+          createdAt: createdAt, 
+          year: null, 
+          advertiser: null, 
+          niche: null, 
+          shares: null, 
+          master_id: null, // New assets are masters
+          version_no: 1,   // New assets are version 1
+          thumbnailPath: null, // Thumbnail generated async
+          accumulatedShares: null // Initially same as shares (null)
+        }
+      };
 
     } catch (error: any) {
       console.error(`❌ Error creating asset from ${sourcePath}: `, error);
@@ -301,8 +297,28 @@ app.whenReady().then(() => {
           if (typeof newAssetId !== 'number' && typeof newAssetId !== 'bigint') {
                throw new Error('Failed to get ID of newly created asset.');
           }
-          console.log(`✅ Asset ${newAssetId} created successfully from ${sourcePath}`);
-          return { success: true, asset: { id: newAssetId, thumbnailPath: null, accumulatedShares: null } };
+          const numericAssetId = Number(newAssetId); // Convert to number
+          console.log(`✅ Asset ${numericAssetId} created successfully from ${sourcePath}`);
+          // Return the full AssetWithThumbnail object
+          return { 
+              success: true, 
+              asset: { 
+                  id: numericAssetId, 
+                  fileName: originalFileName, 
+                  filePath: relativeVaultPath, 
+                  mimeType: mimeType, 
+                  size: stats.size, 
+                  createdAt: createdAt, 
+                  year: null, 
+                  advertiser: null, 
+                  niche: null, 
+                  shares: null, 
+                  master_id: null, 
+                  version_no: 1,
+                  thumbnailPath: null,
+                  accumulatedShares: null 
+              }
+          };
 
       } catch (error: any) {
           console.error('Error importing '+ sourcePath + ': ', error);
@@ -430,6 +446,12 @@ app.whenReady().then(() => {
   // IPC handler for file open dialog
   ipcMain.handle('open-file-dialog', async (event, options) => {
     const win = BrowserWindow.fromWebContents(event.sender);
+    // Add null check for the window object
+    if (!win) {
+        console.error("Could not find BrowserWindow for open-file-dialog");
+        // Return a result indicating cancellation or failure
+        return { canceled: true, filePaths: [] }; 
+    }
     const result = await dialog.showOpenDialog(win, options);
     return result;
   });
@@ -623,8 +645,33 @@ app.whenReady().then(() => {
   });
 
   // --- App Lifecycle ---
+  // <<< Closing bracket for app.whenReady().then(...)
+}); // <<< Added closing parenthesis and bracket for app.whenReady()
 
-  // ... existing code ...
+// Default open or close DevTools by F12 in development
+// and ignore CommandOrControl + R in production.
+// see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+app.on('browser-window-created', (_, window) => {
+    // @ts-ignore: electron-toolkit utils type issue
+    optimizer.watchWindowShortcuts(window)
 });
 
-// ... existing code ...
+// Quit when all windows are closed, except on macOS. There, it's common
+// for applications and their menu bar to stay active until the user quits
+// explicitly with Cmd + Q.
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+        app.quit()
+    }
+});
+
+app.on('activate', () => {
+    // On OS X it's common to re-create a window in the app when the
+    // dock icon is clicked and there are no other windows open.
+    if (BrowserWindow.getAllWindows().length === 0) {
+        createAppWindow()
+    }
+});
+
+// In this file you can include the rest of your app's specific main process
+// code. You can also put them in separate files and import them here.

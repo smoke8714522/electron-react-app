@@ -16,12 +16,6 @@ interface VersionHistoryModalProps {
 // Let's adjust the internal state type to match AssetWithThumbnail more closely
 type VersionAsset = AssetWithThumbnail; // Use the full type provided by useAssets
 
-// Type for the result of the 'open-file-dialog' IPC call
-interface OpenDialogResult {
-  canceled: boolean;
-  filePaths: string[];
-}
-
 // Helper function to format bytes
 const formatBytes = (bytes: number, decimals = 2): string => {
   if (bytes === 0) return '0 Bytes';
