@@ -1,13 +1,16 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 // Removed useAssets import as props are now passed down
-import { AssetWithThumbnail, BulkImportResult, UpdateAssetPayload, BatchUpdateResult, FetchFilters, FetchSort } from '../hooks/useAssets'; 
+import { AssetWithThumbnail, BulkImportResult, UpdateAssetPayload, BatchUpdateResult, FetchFilters, FetchSort, GetVersionsResult, CreateVersionResult, AddToGroupResult, RemoveFromGroupResult } from '../hooks/useAssets'; 
 // Assuming react-icons is installed for a better UX
 import { 
     FiFilter, FiRefreshCw, FiGrid, FiList, FiChevronLeft, FiChevronRight, FiUploadCloud, 
-    FiSearch, FiTag, FiTrash2, FiEdit, FiEye, FiCalendar, FiUser, FiAward, FiShare2
+    FiSearch, FiTag, FiTrash2, FiEdit, FiEye, FiCalendar, FiUser, FiAward, FiShare2,
+    FiClock, FiGitBranch // <-- Import icons for versioning
 } from 'react-icons/fi';
 // Import the new modal component and types
 import BulkEditModal, { BulkUpdatePayload } from './BulkEditModal';
+import VersionHistoryModal from './VersionHistoryModal'; // Import the VersionHistoryModal
+import { Tooltip } from 'react-tooltip'; // Import Tooltip
 
 // PRD §4.1 Library View: Define props for LibraryView including fetchAssets with params
 interface LibraryViewProps {
@@ -20,6 +23,11 @@ interface LibraryViewProps {
     deleteAsset: (id: number) => Promise<boolean>;
     updateAsset: (payload: UpdateAssetPayload) => Promise<boolean>; 
     bulkUpdateAssets: (selectedIds: number[], updates: BulkUpdatePayload) => Promise<BatchUpdateResult>;
+    // Add versioning functions from useAssets hook to props
+    getVersions: (masterId: number) => Promise<GetVersionsResult>;
+    createVersion: (masterId: number, sourcePath: string) => Promise<CreateVersionResult>;
+    addToGroup: (versionId: number, masterId: number) => Promise<AddToGroupResult>;
+    removeFromGroup: (versionId: number) => Promise<RemoveFromGroupResult>;
 }
 
 // PRD §4.1 Library View: Define the main library view component
@@ -30,7 +38,12 @@ const LibraryView: React.FC<LibraryViewProps> = ({
     bulkImportAssets, 
     fetchAssets,
     deleteAsset,
+    updateAsset,
     bulkUpdateAssets,
+    getVersions,
+    createVersion,
+    addToGroup,
+    removeFromGroup
 }) => {
     // PRD §4.1 Library View: Use props instead of hook
     // const { assets, loading, error, bulkImportAssets, fetchAssets } = useAssets(); // Remove this line
@@ -41,6 +54,9 @@ const LibraryView: React.FC<LibraryViewProps> = ({
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     // PRD §4.1 Library View: State for controlling the bulk edit modal
     const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState<boolean>(false);
+    // State for Version History Modal
+    const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
+    const [historyMasterId, setHistoryMasterId] = useState<number | null>(null);
 
     // --- PRD §4.1 Library View: Filter State --- 
     const [filterYear, setFilterYear] = useState<number | null>(null);
@@ -196,6 +212,20 @@ const LibraryView: React.FC<LibraryViewProps> = ({
         }
     };
 
+    // --- Version History Action Handler ---
+    const handleOpenHistoryModal = useCallback((assetId: number) => {
+        console.log('Opening history for asset ID:', assetId);
+        setHistoryMasterId(assetId);
+        setIsHistoryModalOpen(true);
+    }, []);
+
+    const handleCloseHistoryModal = useCallback(() => {
+        setIsHistoryModalOpen(false);
+        setHistoryMasterId(null);
+        // Optionally trigger a refresh of the main asset list if versions might have changed
+        // fetchAssets(); // Consider if this is necessary after modal actions
+    }, []);
+
     // Loading/Error states
     if (loading && assets.length === 0) {
         return <div className="p-4 text-center">Loading assets...</div>;
@@ -250,21 +280,21 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                      <div className={isSidebarOpen ? '' : 'w-full flex justify-center'}>
                          {isSidebarOpen ? (
                              <>
-                                <label htmlFor="filter-year" className={`block text-sm font-medium text-gray-300 mb-1 flex items-center`}><FiCalendar className="mr-1"/> Year</label>
-                                <select 
+                                 <label htmlFor="filter-year" className={`block text-sm font-medium text-gray-300 mb-1`}>Year</label>
+                                 <select 
                                      id="filter-year"
-                                     value={filterYear ?? ''} // Handle null state
-                                     onChange={(e) => setFilterYear(e.target.value ? parseInt(e.target.value, 10) : null)}
+                                     value={filterYear ?? ''} 
+                                     onChange={(e) => setFilterYear(e.target.value === '' ? null : parseInt(e.target.value, 10))}
                                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-sm"
                                  >
-                                    <option value="">All Years</option>
-                                    {availableYears.map(year => (
-                                        <option key={year} value={year}>{year}</option>
-                                    ))}
-                                </select>
+                                     <option value="">All Years</option>
+                                     {availableYears.map(year => (
+                                         <option key={year} value={year}>{year}</option>
+                                     ))}
+                                 </select>
                              </>
                          ) : (
-                            <button className="p-2 rounded hover:bg-gray-700" title="Filter by Year"><FiCalendar size={18}/></button>
+                             <button className="p-2 rounded hover:bg-gray-700" title="Filter by Year"><FiCalendar size={18}/></button>
                          )}
                      </div>
 
@@ -272,21 +302,21 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                      <div className={isSidebarOpen ? '' : 'w-full flex justify-center'}>
                          {isSidebarOpen ? (
                              <>
-                                <label htmlFor="filter-advertiser" className={`block text-sm font-medium text-gray-300 mb-1 flex items-center`}><FiUser className="mr-1"/> Advertiser</label>
-                                <select 
+                                 <label htmlFor="filter-advertiser" className={`block text-sm font-medium text-gray-300 mb-1`}>Advertiser</label>
+                                 <select 
                                      id="filter-advertiser"
                                      value={filterAdvertiser}
                                      onChange={(e) => setFilterAdvertiser(e.target.value)}
                                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-sm"
                                  >
-                                    <option value="">All Advertisers</option>
-                                    {availableAdvertisers.map(adv => (
-                                        <option key={adv} value={adv}>{adv}</option>
-                                    ))}
-                                </select>
+                                     <option value="">All Advertisers</option>
+                                     {availableAdvertisers.map(adv => (
+                                         <option key={adv} value={adv}>{adv}</option>
+                                     ))}
+                                 </select>
                              </>
                          ) : (
-                            <button className="p-2 rounded hover:bg-gray-700" title="Filter by Advertiser"><FiUser size={18}/></button>
+                             <button className="p-2 rounded hover:bg-gray-700" title="Filter by Advertiser"><FiUser size={18}/></button>
                          )}
                      </div>
 
@@ -294,369 +324,428 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                      <div className={isSidebarOpen ? '' : 'w-full flex justify-center'}>
                          {isSidebarOpen ? (
                              <>
-                                <label htmlFor="filter-niche" className={`block text-sm font-medium text-gray-300 mb-1 flex items-center`}><FiAward className="mr-1"/> Niche</label>
-                                <select 
+                                 <label htmlFor="filter-niche" className={`block text-sm font-medium text-gray-300 mb-1`}>Niche</label>
+                                 <select 
                                      id="filter-niche"
                                      value={filterNiche}
                                      onChange={(e) => setFilterNiche(e.target.value)}
                                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-sm"
                                  >
-                                    <option value="">All Niches</option>
-                                    {availableNiches.map(niche => (
-                                        <option key={niche} value={niche}>{niche}</option>
-                                    ))}
-                                </select>
+                                     <option value="">All Niches</option>
+                                     {availableNiches.map(niche => (
+                                         <option key={niche} value={niche}>{niche}</option>
+                                     ))}
+                                 </select>
                              </>
                          ) : (
-                            <button className="p-2 rounded hover:bg-gray-700" title="Filter by Niche"><FiAward size={18}/></button>
+                             <button className="p-2 rounded hover:bg-gray-700" title="Filter by Niche"><FiAward size={18}/></button>
                          )}
                      </div>
 
-                     {/* PRD §4.1 Library View: Shares Filter (Min/Max Inputs) */} 
+                     {/* PRD §4.1 Library View: Shares Filter Range Inputs */} 
                      <div className={isSidebarOpen ? '' : 'w-full flex justify-center'}>
-                         {isSidebarOpen ? (
-                             <>
-                                <label className={`block text-sm font-medium text-gray-300 mb-1 flex items-center`}><FiShare2 className="mr-1"/> Shares</label>
+                        {isSidebarOpen ? (
+                            <div className="space-y-1">
+                                <label className={`block text-sm font-medium text-gray-300`}>Shares</label>
                                 <div className="flex space-x-2">
                                     <input 
                                         type="number" 
-                                        min="0"
-                                        placeholder="Min"
+                                        placeholder="Min" 
                                         value={filterSharesMin}
-                                        onChange={handleNumericInputChange(setFilterSharesMin)} // Use helper
-                                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-sm"
+                                        onChange={handleNumericInputChange(setFilterSharesMin)}
+                                        className="w-1/2 px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-sm"
                                     />
-                                 <input 
+                                    <input 
                                         type="number" 
-                                        min="0"
                                         placeholder="Max" 
                                         value={filterSharesMax}
-                                        onChange={handleNumericInputChange(setFilterSharesMax)} // Use helper
-                                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-sm"
-                                />
+                                        onChange={handleNumericInputChange(setFilterSharesMax)}
+                                        className="w-1/2 px-3 py-2 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-sm"
+                                    />
                                 </div>
-                             </>
-                         ) : (
+                            </div>
+                        ) : (
                             <button className="p-2 rounded hover:bg-gray-700" title="Filter by Shares"><FiShare2 size={18}/></button>
-                         )}
-                     </div>
+                        )}
+                    </div>
 
-                     {/* Placeholder for Tag Filters (if implemented later) */} 
-                     <div className={isSidebarOpen ? '' : 'w-full flex justify-center'}>
-                         {isSidebarOpen ? (
-                             <>
+                    {/* Placeholder for Tag Filter */}
+                    <div className={isSidebarOpen ? '' : 'w-full flex justify-center'}>
+                        {isSidebarOpen ? (
+                            <div>
                                 <label className={`block text-sm font-medium text-gray-300 mb-1`}>Tags</label>
-                                <div className="space-y-1 text-gray-500 text-xs p-2 bg-gray-700 rounded border border-gray-600">
-                                    <p>Tag filtering coming soon...</p>
-                                    {/* Example Checkboxes (Disabled) */}
-                                    <label className="flex items-center space-x-2 opacity-50">
-                                        <input type="checkbox" disabled className="rounded text-blue-500 bg-gray-600 border-gray-500"/>
-                                        <span>Example Tag 1</span>
-                                    </label>
-                                    <label className="flex items-center space-x-2 opacity-50">
-                                        <input type="checkbox" disabled className="rounded text-blue-500 bg-gray-600 border-gray-500"/>
-                                        <span>Example Tag 2</span>
-                                    </label>
+                                <div className="p-2 text-center text-gray-500 text-xs border border-dashed border-gray-600 rounded">
+                                    Tag filtering coming soon...
                                 </div>
-                            </>
-                         ) : (
-                            <button className="p-2 rounded hover:bg-gray-700" title="Filter Tags"><FiTag size={18}/></button>
-                         )}
-                     </div>
+                            </div>
+                        ) : (
+                            <button className="p-2 rounded hover:bg-gray-700" title="Filter by Tags"><FiTag size={18}/></button>
+                        )}
+                    </div>
                 </div>
             </aside>
 
-            {/* Main Content Area */} 
-            <main className="flex-1 flex flex-col overflow-hidden">
-                {/* PRD §4.1 Library View: Sticky Top Action Bar */}
-                {/* NOTE: The previous implementation had layout issues. Refactored for clarity. */}
-                <div className="flex items-center justify-between p-3 border-b border-gray-700 bg-gray-800 flex-shrink-0 sticky top-0 z-10">
-                    {/* Left Side: Conditional Batch Actions */}
-                    <div className="flex items-center space-x-3 flex-grow mr-4 min-w-0">
-                        {selectedAssetIds.size > 0 ? (
-                            <> 
-                                <span className="text-sm text-gray-300 font-medium bg-gray-700 px-2.5 py-1 rounded">
-                                    {selectedAssetIds.size} selected
-                                </span>
-                                <button 
-                                   onClick={handleOpenBulkEditModal}
-                                   className="flex items-center px-3 py-1 bg-yellow-600 hover:bg-yellow-700 rounded text-white text-xs font-medium transition-colors duration-150"
-                                   title="Edit Metadata for Selected Assets"
-                               >
-                                   <FiEdit className="mr-1" size={14}/> Edit Metadata
-                               </button>
-                                <button 
-                                   onClick={handleBatchDelete}
-                                   className="flex items-center px-3 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-xs font-medium transition-colors duration-150"
-                                   title="Delete Selected Assets"
-                               >
-                                   <FiTrash2 className="mr-1" size={14}/> Delete Selected
-                               </button>
-                            </> 
-                        ) : (
-                            // Placeholder when nothing is selected
-                            <span className="text-sm text-gray-500 italic">Select assets for batch actions</span>
-                        )}
-                    </div>
-                    
-                    {/* Right Side: Main Actions, Sort, & View Toggle */}
-                    <div className="flex items-center space-x-2 flex-shrink-0">
-                        {/* Main Actions */} 
-                        <button 
-                            onClick={handleBulkImport}
-                            disabled={loading}
-                            className="flex items-center px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-white text-sm font-medium transition-colors duration-150 disabled:opacity-50"
-                        >
-                            <FiUploadCloud className="mr-1.5" size={16}/> Bulk Import
-                        </button>
-                        <button 
-                            onClick={handleRefresh}
-                            disabled={loading}
-                            className="flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm font-medium transition-colors duration-150 disabled:opacity-50"
-                            title="Refresh Assets"
-                        >
-                            <FiRefreshCw className={`mr-1.5 ${loading ? 'animate-spin' : ''}`} size={16}/> Refresh
-                        </button>
-                        
-                        {/* PRD §4.1 Library View: Sort Dropdown (Moved here) */} 
-                         <div className="flex items-center">
-                            <label htmlFor="sort-by" className="text-sm mr-2 text-gray-400">Sort by:</label>
-                            <select 
-                                id="sort-by"
-                                value={`${sortBy}-${sortOrder}`} // Combine value for selection
-                                onChange={(e) => {
-                                    const [newSortBy, newSortOrder] = e.target.value.split('-');
-                                    setSortBy(newSortBy as FetchSort['sortBy']);
-                                    setSortOrder(newSortOrder as FetchSort['sortOrder']);
-                                }}
-                                className="px-2 py-1 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-sm"
+            {/* PRD §4.1 Library View: Main Content Area */}
+            <main className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                {/* Sticky Top Toolbar */}
+                <div className="flex-shrink-0 bg-gray-850 p-3 border-b border-gray-700 shadow-md">
+                    <div className="flex items-center justify-between">
+                        {/* Left Actions: Import, Refresh */}
+                        <div className="flex items-center space-x-2">
+                            <button 
+                                onClick={handleBulkImport}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm font-medium flex items-center space-x-1 transition duration-150 ease-in-out"
+                                title="Import multiple files"
                             >
-                                <option value="createdAt-DESC">Newest First</option>
-                                <option value="createdAt-ASC">Oldest First</option>
-                                <option value="fileName-ASC">FileName A-Z</option>
-                                <option value="fileName-DESC">FileName Z-A</option>
-                                <option value="year-DESC">Year (High-Low)</option>
-                                <option value="year-ASC">Year (Low-High)</option>
-                                <option value="shares-DESC">Shares (High-Low)</option>
-                                <option value="shares-ASC">Shares (Low-High)</option>
-                            </select>
-                         </div>
-
-                        {/* View Toggle */} 
-                        <div className="flex items-center text-sm">
-                             <button 
-                                onClick={() => setViewMode('grid')}
-                                className={`flex items-center justify-center px-2.5 py-1.5 h-8 border border-r-0 border-gray-600 rounded-l ${viewMode === 'grid' ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'}`}
-                                title="Grid View"
-                            >
-                                <FiGrid size={16} />
+                                <FiUploadCloud size={16} />
+                                <span>Bulk Import</span>
                             </button>
                             <button 
-                                onClick={() => setViewMode('list')}
-                                className={`flex items-center justify-center px-2.5 py-1.5 h-8 border border-gray-600 rounded-r ${viewMode === 'list' ? 'bg-gray-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'}`}
-                                title="List View"
+                                onClick={handleRefresh}
+                                className="p-2 rounded text-gray-400 hover:bg-gray-700 hover:text-white transition duration-150 ease-in-out"
+                                title="Refresh asset list and filters"
                             >
-                                <FiList size={16} />
+                                <FiRefreshCw size={18} />
                             </button>
+                        </div>
+                        
+                        {/* Center: Conditional Batch Actions */}
+                        <div className="flex-grow flex justify-center px-4">
+                            {selectedAssetIds.size > 0 && (
+                                <div className="flex items-center space-x-3 bg-gray-700 px-3 py-1 rounded-md">
+                                    <span className="text-sm font-medium text-gray-300">
+                                        {selectedAssetIds.size} selected
+                                    </span>
+                                    <button 
+                                        onClick={handleOpenBulkEditModal}
+                                        className="px-2 py-1 bg-yellow-500 hover:bg-yellow-600 rounded text-white text-xs font-semibold flex items-center space-x-1 transition duration-150 ease-in-out"
+                                        title="Edit metadata for selected assets"
+                                    >
+                                        <FiEdit size={14} />
+                                        <span>Edit Metadata</span>
+                                    </button>
+                                    <button 
+                                        onClick={handleBatchDelete}
+                                        className="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-white text-xs font-semibold flex items-center space-x-1 transition duration-150 ease-in-out"
+                                        title="Delete selected assets"
+                                    >
+                                        <FiTrash2 size={14} />
+                                        <span>Delete Selected</span>
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Right Actions: Sort, View Mode */}
+                        <div className="flex items-center space-x-3">
+                            {/* Sort Dropdown */}
+                            <div className="flex items-center space-x-1">
+                                <label htmlFor="sort-by" className="text-sm text-gray-400">Sort by:</label>
+                                <select 
+                                    id="sort-by"
+                                    value={`${sortBy}-${sortOrder}`}
+                                    onChange={(e) => {
+                                        const [newSortBy, newSortOrder] = e.target.value.split('-') as [FetchSort['sortBy'], FetchSort['sortOrder']];
+                                        setSortBy(newSortBy);
+                                        setSortOrder(newSortOrder);
+                                    }}
+                                    className="px-2 py-1 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-sm"
+                                >
+                                    <option value="createdAt-DESC">Newest</option>
+                                    <option value="createdAt-ASC">Oldest</option>
+                                    <option value="fileName-ASC">Name (A-Z)</option>
+                                    <option value="fileName-DESC">Name (Z-A)</option>
+                                    <option value="year-DESC">Year (High-Low)</option>
+                                    <option value="year-ASC">Year (Low-High)</option>
+                                    <option value="shares-DESC">Shares (High-Low)</option> 
+                                    <option value="shares-ASC">Shares (Low-High)</option> 
+                                </select>
+                            </div>
+
+                            {/* View Mode Toggle */}
+                            <div className="flex items-center space-x-1 bg-gray-700 p-0.5 rounded">
+                                <button 
+                                    onClick={() => setViewMode('grid')}
+                                    className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                                    title="Grid View"
+                                >
+                                    <FiGrid size={18} />
+                                </button>
+                                <button 
+                                    onClick={() => setViewMode('list')}
+                                    className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'}`}
+                                    title="List View"
+                                >
+                                    <FiList size={18} />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Asset Display Area */} 
-                <div className="flex-1 overflow-y-auto p-4 min-h-0">
-                    {/* PRD §4.1 Library View: Display assets directly from props, filtering is backend */} 
-                    {viewMode === 'grid' ? (
+                {/* Asset Display Area - Ensure it scrolls */} 
+                <div className="flex-1 overflow-y-auto p-4 bg-gray-900">
+                    {assets.length === 0 ? (
+                        <div className="text-center text-gray-500 pt-10">No assets found matching your criteria.</div>
+                    ) : viewMode === 'grid' ? (
+                        // PRD §4.1 Library View: Grid View - Added items-start and content-start
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 items-start content-start">
-                             {/* Map over assets prop */} 
-                             {assets.map((asset) => (
+                            {assets.map(asset => (
                                 <AssetCard 
                                     key={asset.id} 
                                     asset={asset} 
-                                    isSelected={selectedAssetIds.has(asset.id)}
+                                    isSelected={selectedAssetIds.has(asset.id)} 
                                     onSelect={handleSelectAsset}
+                                    onHistory={handleOpenHistoryModal}
                                 />
                             ))}
                         </div>
                     ) : (
+                        // PRD §4.1 Library View: List View - Table implementation
                         <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-700">
-                                <thead className="bg-gray-800">
-                                    {/* PRD §4.1 Library View: Table header for list view */}
+                             <table className="min-w-full divide-y divide-gray-700">
+                                <thead className="bg-gray-800 sticky top-0 z-10">
                                     <tr>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-12">Select</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-16">Thumb</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Filename</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Year</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Advertiser</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Niche</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Shares</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Size</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Created</th>
-                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
+                                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-10">
+                                            <input type="checkbox" className="rounded" /* Add bulk select logic if needed */ />
+                                        </th>
+                                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-20">Preview</th>
+                                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Filename</th>
+                                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Year</th>
+                                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Advertiser</th>
+                                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Niche</th>
+                                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Shares</th>
+                                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Accumulated</th>
+                                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-gray-850 divide-y divide-gray-700">
-                                    {/* PRD §4.1 Library View: Render table rows directly */}
-                                    {assets.map((asset) => {
-                                        const isSelected = selectedAssetIds.has(asset.id);
-                                        // Helper to format file size (kept local for simplicity)
-                                        const formatBytes = (bytes: number, decimals = 1): string => {
-                                            if (bytes === 0) return '0 Bytes';
-                                            const k = 1024;
-                                            const dm = decimals < 0 ? 0 : decimals;
-                                            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-                                            const i = Math.floor(Math.log(bytes) / Math.log(k));
-                                            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-                                        }
-                                        return (
-                                            <tr key={asset.id} className={`hover:bg-gray-750 ${isSelected ? 'bg-blue-900/50' : ''} transition-colors duration-150`}>
-                                                {/* Select Checkbox Cell */}
-                                                <td className="px-4 py-2 whitespace-nowrap align-middle">
-                                                    <input 
-                                                        type="checkbox" 
-                                                        checked={isSelected}
-                                                        onChange={(e) => handleSelectAsset(asset.id, e.target.checked)}
-                                                        className="form-checkbox h-4 w-4 text-blue-500 bg-gray-900 border-gray-600 rounded focus:ring-blue-500 focus:ring-offset-0 focus:ring-offset-gray-800 cursor-pointer"
-                                                        aria-label={`Select ${asset.fileName}`}
-                                                    />
-                                                </td>
-                                                {/* Thumbnail Cell */}
-                                                <td className="px-4 py-2 align-middle">
-                                                    <div className="w-10 h-10 bg-gray-700 rounded flex items-center justify-center overflow-hidden flex-shrink-0">
-                                                        {asset.thumbnailPath ? (
-                                                            <img src={asset.thumbnailPath} alt={`Thumb ${asset.fileName}`} className="w-full h-full object-cover" loading="lazy"/>
-                                                        ) : (
-                                                            <FiEye size={20} className="text-gray-500" /> 
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                {/* Filename Cell */}
-                                                <td className="px-4 py-2 text-sm font-medium text-gray-200 align-middle max-w-xs truncate" title={asset.fileName}>
-                                                    {asset.fileName}
-                                                </td>
-                                                {/* Year Cell */}
-                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle">
-                                                    {asset.year || 'N/A'}
-                                                </td>
-                                                {/* Advertiser Cell */}
-                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle max-w-xs truncate" title={asset.advertiser || undefined}>
-                                                    {asset.advertiser || 'N/A'}
-                                                </td>
-                                                {/* Niche Cell */}
-                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle max-w-xs truncate" title={asset.niche || undefined}>
-                                                    {asset.niche || 'N/A'}
-                                                </td>
-                                                {/* Shares Cell */}
-                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle">
-                                                    {(asset.shares !== null && asset.shares !== undefined) ? asset.shares : 'N/A'}
-                                                </td>
-                                                {/* Size Cell */}
-                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle">
-                                                    {formatBytes(asset.size)}
-                                                </td>
-                                                {/* Created Cell */}
-                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle">
-                                                    {new Date(asset.createdAt).toLocaleDateString()}
-                                                </td>
-                                                {/* Actions Cell */} 
-                                                <td className="px-4 py-2 text-sm text-gray-400 align-middle">
-                                                    <div className="flex items-center space-x-2">
-                                                        {/* Placeholder for inline actions - use actual buttons or links later */} 
-                                                        <button disabled className="p-1 rounded hover:bg-gray-700 opacity-50" title="Edit (Coming Soon)"><FiEdit size={14}/></button>
-                                                        <button disabled className="p-1 rounded hover:bg-gray-700 opacity-50" title="Delete (Use Batch)"><FiTrash2 size={14}/></button>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        );
-                                    })}
+                                    {assets.map(asset => (
+                                        <tr key={asset.id} className={`hover:bg-gray-800 ${selectedAssetIds.has(asset.id) ? 'bg-blue-900/50' : ''}`}>
+                                            <td className="px-3 py-2 whitespace-nowrap">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="rounded"
+                                                    checked={selectedAssetIds.has(asset.id)} 
+                                                    onChange={(e) => handleSelectAsset(asset.id, e.target.checked)}
+                                                />
+                                            </td>
+                                            <td className="px-3 py-2 whitespace-nowrap">
+                                                {/* Consistent thumbnail rendering */} 
+                                                <div className="w-16 h-10 bg-gray-700 rounded flex items-center justify-center overflow-hidden">
+                                                    {asset.thumbnailPath ? (
+                                                        <img src={asset.thumbnailPath + `?${Date.now()}`} alt="Thumbnail" className="object-cover h-full w-full" loading="lazy"/>
+                                                    ) : (
+                                                        <FiEye className="text-gray-500" size={20} />
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-2 text-sm text-gray-300 truncate max-w-xs" title={asset.fileName}>{asset.fileName}</td>
+                                            <td className="px-3 py-2 text-sm text-gray-400">{asset.year || '-'}</td>
+                                            <td className="px-3 py-2 text-sm text-gray-400 truncate max-w-[150px]" title={asset.advertiser || ''}>{asset.advertiser || '-'}</td>
+                                            <td className="px-3 py-2 text-sm text-gray-400 truncate max-w-[150px]" title={asset.niche || ''}>{asset.niche || '-'}</td>
+                                            <td className="px-3 py-2 text-sm text-gray-400">{asset.shares ?? '-'}</td>
+                                            <td className="px-3 py-2 text-sm text-gray-400 font-medium">{asset.accumulatedShares ?? asset.shares ?? '-'}</td>
+                                            <td className="px-3 py-2 whitespace-nowrap text-sm font-medium space-x-2">
+                                                {/* Add List View actions - placeholder for now */}
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleOpenHistoryModal(asset.id);
+                                                    }}
+                                                    className="text-blue-400 hover:text-blue-300 p-1 hover:bg-gray-700 rounded"
+                                                    title="View History"
+                                                >
+                                                    <FiClock size={16}/>
+                                                </button>
+                                                {/* Could add edit/delete buttons here too if needed */}
+                                            </td>
+                                        </tr>
+                                    ))}
                                 </tbody>
                             </table>
-                         </div>
-                    )}
-                    {/* Display message if no assets match filters/search */} 
-                    {assets.length === 0 && !loading && (
-                        <div className="text-center text-gray-500 mt-8">No assets found matching your criteria.</div>
+                        </div>
                     )}
                 </div>
             </main>
 
             {/* PRD §4.1 Library View: Bulk Edit Modal */} 
-            <BulkEditModal 
-                isOpen={isBulkEditModalOpen} 
-                onClose={() => setIsBulkEditModalOpen(false)} 
-                onSave={handleBulkUpdateSave} 
-                selectedCount={selectedAssetIds.size}
+            {isBulkEditModalOpen && (
+                <BulkEditModal
+                    isOpen={isBulkEditModalOpen}
+                    onClose={() => setIsBulkEditModalOpen(false)}
+                    onSave={handleBulkUpdateSave}
+                    selectedCount={selectedAssetIds.size}
+                />
+            )}
+
+            {/* Tooltips for the Library View */}
+            <Tooltip id="library-tooltip" place="top" />
+
+            {/* Version History Modal */} 
+            <VersionHistoryModal
+                isOpen={isHistoryModalOpen}
+                masterId={historyMasterId} // Pass the selected master ID
+                onClose={handleCloseHistoryModal} // Pass the close handler
             />
 
+            {/* Tooltip for Asset Card items */}
+            <Tooltip id="asset-card-tooltip" place="top" />
         </div>
     );
 };
 
-// --- Asset Card Component (Using Tailwind) --- 
+// Utility function (can be moved to a utils file)
+const formatBytes = (bytes: number, decimals = 1): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+}
 
+// --- Asset Card Component (used in Grid View) --- 
 interface AssetCardProps {
     asset: AssetWithThumbnail;
     isSelected: boolean;
     onSelect: (assetId: number, isSelected: boolean) => void;
+    onHistory: (masterId: number) => void; // <-- Add history callback prop
 }
 
-// PRD §4.1 Library View: Component for displaying a single asset card (Tailwind)
-const AssetCard: React.FC<AssetCardProps> = ({ asset, isSelected, onSelect }) => {
+// PRD §4.1 Library View: Asset card component
+const AssetCard: React.FC<AssetCardProps> = ({ asset, isSelected, onSelect, onHistory }) => {
     const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        e.stopPropagation(); // Prevent card click when checkbox is clicked
+        // Stop propagation to prevent card click when clicking checkbox
+        e.stopPropagation(); 
         onSelect(asset.id, e.target.checked);
     };
-
     const handleCardClick = () => {
+        // Toggle selection when the card area (excluding checkbox/buttons) is clicked
         onSelect(asset.id, !isSelected);
     };
 
+    const handleHistoryClick = (e: React.MouseEvent) => {
+        e.stopPropagation(); // Prevent card click
+        onHistory(asset.id);
+    };
+
+    const displayAccumulatedShares = asset.accumulatedShares != null && asset.accumulatedShares !== asset.shares;
+    const displayVersionBadge = asset.version_no != null && asset.version_no > 1;
+
     return (
         <div 
-            className={`relative border rounded-lg overflow-hidden shadow-md bg-gray-800 ${isSelected ? 'border-blue-500 ring-2 ring-blue-500 ring-opacity-50' : 'border-gray-700 hover:border-gray-600'} flex flex-col cursor-pointer transition-all duration-150`}
+            className={`bg-gray-800 rounded-lg overflow-hidden shadow-lg cursor-pointer transition-all duration-200 ease-in-out relative group border ${isSelected ? 'border-blue-500 ring-2 ring-blue-500/50' : 'border-gray-700 hover:border-gray-600 hover:shadow-blue-900/30'}`}
             onClick={handleCardClick}
         >
-            {/* PRD §4.1 Library View: Multi-select checkbox */} 
+            {/* Selection Checkbox - Positioned top-left */}
             <input 
                 type="checkbox" 
-                checked={isSelected} 
-                onChange={handleCheckboxChange} 
-                onClick={(e) => e.stopPropagation()} // Prevent card click when checkbox is clicked
-                className="absolute top-2 right-2 z-10 h-4 w-4 rounded text-blue-600 bg-gray-700 border-gray-500 focus:ring-blue-500 cursor-pointer"
-                aria-label={`Select ${asset.fileName}`}
+                checked={isSelected}
+                onChange={handleCheckboxChange}
+                onClick={(e) => e.stopPropagation()} // Also stop propagation on click itself
+                className="absolute top-2 left-2 z-10 h-4 w-4 rounded text-blue-600 bg-gray-700 border-gray-500 focus:ring-blue-500 cursor-pointer"
+                aria-label={`Select asset ${asset.fileName}`}
             />
-            {/* PRD §4.3 Thumbnail Service: Display thumbnail */} 
-            <div className="w-full h-40 bg-gray-700 flex items-center justify-center overflow-hidden flex-shrink-0">
+
+            {/* Version Badges - Positioned top-right */} 
+            <div className="absolute top-2 right-2 z-10 flex flex-col items-end space-y-1">
+                {displayAccumulatedShares && (
+                    <span 
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-600 text-purple-100 shadow"
+                        title={`Accumulated Shares: ${asset.accumulatedShares?.toLocaleString()}`}
+                    >
+                        <FiShare2 className="mr-1" size={12}/> 
+                        {asset.accumulatedShares?.toLocaleString()}
+                    </span>
+                )}
+                 {displayVersionBadge && (
+                    <span 
+                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-600 text-teal-100 shadow"
+                        title={`Version: ${asset.version_no}`}
+                    >
+                        <FiGitBranch className="mr-1" size={12}/> v{asset.version_no}
+                    </span>
+                 )}
+            </div>
+
+            {/* Thumbnail Area */} 
+            <div className="w-full h-32 bg-gray-700 flex items-center justify-center overflow-hidden relative">
                 {asset.thumbnailPath ? (
                     <img 
-                        src={asset.thumbnailPath} 
-                        alt={`${asset.fileName} thumbnail`} 
-                        className="w-full h-full object-cover" 
-                        loading="lazy" // Lazy load images
+                        src={asset.thumbnailPath + `?${Date.now()}`} // Append timestamp to try and bypass cache if needed
+                        alt={`Thumbnail for ${asset.fileName}`}
+                        className="object-cover h-full w-full transition-transform duration-300 group-hover:scale-105" 
+                        loading="lazy"
                     />
                 ) : (
-                    <div className="text-gray-500 text-sm">No Preview</div> 
+                    <FiEye className="text-gray-500 text-4xl" />
                 )}
+                {/* Optional: Overlay on hover? */}
             </div>
-            {/* PRD §4.1 Library View: Display asset metadata */} 
-            <div className="p-3 flex flex-col gap-0.5 text-xs text-gray-400 overflow-hidden">
-                <strong 
-                    title={asset.fileName} 
-                    className="block text-sm font-medium text-gray-200 whitespace-nowrap overflow-hidden text-ellipsis mb-1"
+
+            {/* Content Area */} 
+            <div className="p-3">
+                <h4 
+                    className="text-sm font-semibold text-gray-100 truncate mb-1" 
+                    title={asset.fileName}
                 >
                     {asset.fileName}
-                </strong>
-                <p className="whitespace-nowrap overflow-hidden text-ellipsis">Year: <span className="text-gray-300">{asset.year ?? 'N/A'}</span></p>
-                <p className="whitespace-nowrap overflow-hidden text-ellipsis">Advertiser: <span className="text-gray-300">{asset.advertiser ?? 'N/A'}</span></p>
-                <p className="whitespace-nowrap overflow-hidden text-ellipsis">Niche: <span className="text-gray-300">{asset.niche ?? 'N/A'}</span></p>
-                <p className="whitespace-nowrap overflow-hidden text-ellipsis">Shares: <span className="text-gray-300">{asset.shares ?? 'N/A'}</span></p>
-                 {/* TODO: Display custom fields/tags */} 
+                </h4>
+                <div className="text-xs text-gray-400 space-y-0.5">
+                    <p className="truncate" title={`Year: ${asset.year || 'N/A'}`}>Year: {asset.year || '-'}</p>
+                    <p className="truncate" title={`Advertiser: ${asset.advertiser || 'N/A'}`}>Adv: {asset.advertiser || '-'}</p>
+                    <p className="truncate" title={`Niche: ${asset.niche || 'N/A'}`}>Niche: {asset.niche || '-'}</p>
+                    <p className="truncate" title={`Shares: ${asset.shares?.toLocaleString() || 'N/A'}`}>Shares: {asset.shares?.toLocaleString() ?? '-'}</p>
+                </div>
+            </div>
+
+             {/* Footer Actions - Visible on hover/selected? (Or always visible) */} 
+            <div className="px-3 pb-2 pt-1 bg-gray-800 border-t border-gray-700 flex justify-end items-center space-x-2">
+                <button 
+                    onClick={handleHistoryClick}
+                    className="p-1 text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded transition-colors duration-150"
+                    title="View History"
+                >
+                    <FiClock size={16} />
+                </button>
+                {/* Add other actions like quick view, edit later? */}
+            </div>
+
+            {/* Versioning Badges/Button */} 
+            <div className="flex items-center justify-end space-x-2 mt-1 absolute bottom-2 right-2">
+                {/* Accumulated Shares Badge (if different) */}
+                {asset.accumulatedShares !== undefined && asset.accumulatedShares !== null && asset.accumulatedShares !== asset.shares && (
+                     <span 
+                         className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-900 text-blue-300"
+                         data-tooltip-id="asset-card-tooltip"
+                         data-tooltip-content={`Total shares including versions: ${asset.accumulatedShares.toLocaleString()}`}
+                     >
+                          <FiShare2 size={12} className="mr-0.5"/> {asset.accumulatedShares.toLocaleString()}
+                     </span>
+                )}
+                 {/* Version Number Badge (if > 1) */}
+                 {(asset.version_no ?? 1) > 1 && (
+                     <span 
+                         className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-700 text-gray-300"
+                          data-tooltip-id="asset-card-tooltip"
+                          data-tooltip-content={`This asset is version ${asset.version_no}`}
+                      >
+                          v{asset.version_no}
+                     </span>
+                 )}
+                  {/* History Button */} 
+                 <button 
+                      onClick={handleHistoryClick} 
+                      className="p-1 rounded text-gray-400 hover:text-blue-400 hover:bg-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      data-tooltip-id="asset-card-tooltip"
+                      data-tooltip-content="View Version History"
+                  >
+                      <FiClock size={14} />
+                 </button>
             </div>
         </div>
     );
 };
-
-// --- Remove old inline styles object --- 
-// const styles: { [key: string]: React.CSSProperties } = { ... };
 
 export default LibraryView; 

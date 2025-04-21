@@ -1,5 +1,28 @@
 import { useState, useEffect, useCallback } from 'react'
 
+// --- Versioning Result Types ---
+export interface CreateVersionResult {
+  success: boolean;
+  newId?: number;
+  error?: string;
+}
+
+export interface GetVersionsResult {
+  success: boolean;
+  assets?: AssetWithThumbnail[]; // Ensure AssetWithThumbnail is exported
+  error?: string;
+}
+
+export interface AddToGroupResult {
+  success: boolean;
+  error?: string;
+}
+
+export interface RemoveFromGroupResult {
+  success: boolean;
+  error?: string;
+}
+
 // PRD §4.2 Data Model - Define Asset structure (reflects schema changes)
 export interface Asset {
   id: number;
@@ -12,6 +35,8 @@ export interface Asset {
   advertiser: string | null;
   niche: string | null;
   shares: number | null; // Renamed from adspower, now numeric
+  master_id?: number | null; // Foreign key to the master asset
+  version_no?: number; // Version number within the group
 }
 
 // PRD §4.1 Library View: Define the fields available for bulk editing
@@ -21,6 +46,8 @@ export type BulkUpdatePayload = Partial<EditableAssetFields>;
 // PRD §4.1 Library View: Extend Asset with optional thumbnail path for UI
 export interface AssetWithThumbnail extends Asset {
   thumbnailPath?: string | null;
+  accumulatedShares?: number | null; // Total shares including versions
+  version_no?: number; // Version number of this specific record
 }
 
 // Result type for create-asset IPC call
@@ -69,12 +96,17 @@ export type UpdateAssetPayload = {
 interface ExposedApi {
   // Updated invoke signature for get-assets to accept filters/sort
   invoke(channel: 'get-assets', params?: { filters?: { year?: number | null, advertiser?: string | null, niche?: string | null, sharesMin?: number | null, sharesMax?: number | null }, sort?: { sortBy?: string, sortOrder?: string } }): Promise<AssetWithThumbnail[]>; 
-  invoke(channel: 'open-file-dialog'): Promise<string | null>;
+  invoke(channel: 'open-file-dialog', options?: any): Promise<{ canceled: boolean; filePaths: string[] } | null>; // Updated based on VersionHistoryModal usage
   invoke(channel: 'create-asset', sourcePath: string): Promise<CreateAssetResult>; 
   invoke(channel: 'update-asset', payload: UpdateAssetPayload): Promise<boolean>;
   invoke(channel: 'delete-asset', id: number): Promise<boolean>;
   invoke(channel: 'bulk-import-assets'): Promise<BulkImportResult>;
-  invoke(channel: string, ...args: any[]): Promise<any>; 
+  // Add versioning IPC calls
+  invoke(channel: 'create-version', payload: { masterId: number, sourcePath: string }): Promise<CreateVersionResult>;
+  invoke(channel: 'get-versions', payload: { masterId: number }): Promise<GetVersionsResult>;
+  invoke(channel: 'add-to-group', payload: { versionId: number, masterId: number }): Promise<AddToGroupResult>;
+  invoke(channel: 'remove-from-group', payload: { versionId: number }): Promise<RemoveFromGroupResult>;
+  invoke(channel: string, ...args: any[]): Promise<any>; // Keep generic fallback
 }
 
 // Augment the Window interface
@@ -300,6 +332,99 @@ export function useAssets() {
     return results;
   }, [fetchAssets]);
 
+  // --- Versioning Functions ---
+
+  const getVersions = useCallback(async (masterId: number): Promise<GetVersionsResult> => {
+    // Use a separate loading/error state for modal? Or rely on main hook's?
+    // Let's use main hook state for now, modal can show generic loading indicator.
+    setLoading(true); 
+    setError(null);
+    try {
+      const result = await window.api.invoke('get-versions', { masterId });
+      if (!result.success) {
+          // Don't set the main hook error maybe, let the caller handle it?
+          console.error('Failed to get versions:', result.error);
+          // setError(`Failed to get versions: ${result.error || 'Unknown error'}`);
+      }
+      return result; // Return the full result object
+    } catch (err: any) {
+      console.error('Failed to get versions IPC call:', err);
+      // setError('An unexpected error occurred while fetching versions.');
+       // Return an error object consistent with GetVersionsResult
+      return { success: false, error: err.message || 'IPC call failed' };
+    } finally {
+      setLoading(false); // Stop loading indicator
+    }
+  }, []); // No dependencies needed here
+
+  const createVersion = useCallback(async (masterId: number, sourcePath: string): Promise<CreateVersionResult> => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Pass payload as object { masterId, sourcePath }
+      const result = await window.api.invoke('create-version', { masterId, sourcePath });
+      if (result.success) {
+        // Refresh main asset list to potentially update accumulated shares etc.
+        await fetchAssets(); 
+      } else {
+         setError(`Failed to create version: ${result.error || 'Unknown error'}`);
+      }
+      return result;
+    } catch (err: any) {
+        console.error('Failed to create version IPC call:', err);
+        setError('An unexpected error occurred while creating version.');
+        return { success: false, error: err.message || 'IPC call failed' };
+    } finally {
+        setLoading(false);
+    }
+  }, [fetchAssets]); // Depends on fetchAssets
+
+  const addToGroup = useCallback(async (versionId: number, masterId: number): Promise<AddToGroupResult> => {
+    setLoading(true);
+    setError(null);
+    try {
+        // Pass payload as object { versionId, masterId }
+        const result = await window.api.invoke('add-to-group', { versionId, masterId });
+         if (result.success) {
+            // Refresh main asset list to reflect status change (version becoming non-master)
+            await fetchAssets(); 
+        } else {
+            setError(`Failed to add to group: ${result.error || 'Unknown error'}`);
+        }
+        return result;
+    } catch (err: any) {
+        console.error('Failed to add to group IPC call:', err);
+        setError('An unexpected error occurred while adding to group.');
+        return { success: false, error: err.message || 'IPC call failed' };
+    } finally {
+        setLoading(false);
+    }
+  }, [fetchAssets]); // Depends on fetchAssets
+
+  // CODEBASE.md uses `payload: { versionId: number }` which matches IPC definition
+  // Hook signature takes just the ID, matching deleteAsset pattern
+  const removeFromGroup = useCallback(async (versionId: number): Promise<RemoveFromGroupResult> => {
+    setLoading(true);
+    setError(null);
+    try {
+        // Pass payload as object { versionId }
+        const result = await window.api.invoke('remove-from-group', { versionId });
+         if (result.success) {
+             // Refresh main asset list to reflect status change (version becoming master)
+            await fetchAssets(); 
+        } else {
+            setError(`Failed to remove from group: ${result.error || 'Unknown error'}`);
+        }
+        return result;
+    } catch (err: any) {
+        console.error('Failed to remove from group IPC call:', err);
+        setError('An unexpected error occurred while removing from group.');
+        return { success: false, error: err.message || 'IPC call failed' };
+    } finally {
+        setLoading(false);
+    }
+  }, [fetchAssets]); // Depends on fetchAssets
+
   // Expose bulkImportAssets along with other actions
   return { 
       assets, 
@@ -310,6 +435,11 @@ export function useAssets() {
       bulkImportAssets, 
       updateAsset, 
       deleteAsset,
-      bulkUpdateAssets // Expose the new function
+      bulkUpdateAssets, // Expose the new function
+      // Versioning functions
+      getVersions,
+      createVersion,
+      addToGroup,
+      removeFromGroup,
   }
 } 
