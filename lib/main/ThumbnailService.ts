@@ -2,8 +2,6 @@ import fs from 'fs/promises';
 import path from 'path';
 // @ts-ignore: ffmpeg-static doesn't ship types
 import ffmpegPath from 'ffmpeg-static';
-// @ts-ignore: pdf-thumbnail missing types
-const pdfThumbnail = require('pdf-thumbnail');
 // @ts-ignore: sharp doesn't ship types
 import sharp from 'sharp';
 import { execFile } from 'child_process';
@@ -64,12 +62,14 @@ export const generateThumbnail = async (assetId: number, sourcePath: string): Pr
                 });
             });
         } else if (ext === '.pdf') {
-            // Generate PDF thumbnail via pdf-thumbnail (requires ImageMagick & Ghostscript)
-            const pdfBuf = await fs.readFile(sourcePath);
-            const imgStream = await pdfThumbnail(pdfBuf, { compress: { type: 'JPEG', quality: 90 }, resize: { width: 400 } });
-            const chunks: Buffer[] = [];
-            for await (const chunk of imgStream) chunks.push(chunk as Buffer);
-            await fs.writeFile(outputPath, Buffer.concat(chunks));
+            // PDF thumbnails now generated via magick CLI (ImageMagick must be in PATH)
+            // Convert first PDF page to JPG using magick CLI
+            await new Promise<void>((resolve, reject) => {
+                const exe = 'magick';
+                const input = `${sourcePath}[0]`;
+                const args = ['-density', '150', input, '-resize', '400x', '-quality', '90', outputPath];
+                execFile(exe, args, { windowsHide: true }, (error) => error ? reject(error) : resolve());
+            });
         } else {
             return null;
         }
