@@ -35,12 +35,16 @@ initializeDatabase(db)
 interface Asset extends BaseAsset {
   master_id?: number | null;
   version_no?: number;
+  // Step 1: Add fields calculated by the enhanced get-assets query
+  versionCount?: number | null;
+  accumulatedShares?: number | null;
 }
 
 // Define AssetWithThumbnail based on the extended Asset type
 interface AssetWithThumbnail extends Asset {
   thumbnailPath?: string | null;
-  accumulatedShares?: number | null;
+  // No longer need explicit accumulatedShares here as it's in Asset now
+  // versionCount is also inherited from Asset
 }
 
 // PRD §4.1 Library View: Update get-assets to handle filtering and sorting
@@ -110,16 +114,20 @@ app.whenReady().then(() => {
   // PRD §4.1 Library View: Update get-assets to handle filtering and sorting
   ipcMain.handle('get-assets', async (_, params?: { filters?: AssetFilters, sort?: AssetSort }): Promise<AssetWithThumbnail[]> => {
     try {
-        // Select base fields plus accumulated shares. Alias asset table as 'a'.
+        // Step 1: Enhance SQL query with LEFT JOIN and aggregations
         let query = `
-          SELECT 
-            a.id, a.fileName, a.filePath, a.mimeType, a.size, a.createdAt, 
+          SELECT
+            a.id, a.fileName, a.filePath, a.mimeType, a.size, a.createdAt,
             a.year, a.advertiser, a.niche, a.shares, a.master_id, a.version_no,
-            a.shares + COALESCE((SELECT SUM(v.shares) FROM assets v WHERE v.master_id = a.id), 0) AS accumulatedShares
+            -- Calculate total shares (master + versions)
+            a.shares + COALESCE(SUM(v.shares), 0) AS accumulatedShares,
+            -- Calculate total versions (master + versions)
+            1 + COUNT(v.id) AS versionCount
           FROM assets a
+          LEFT JOIN assets v ON v.master_id = a.id
         `;
         const whereClauses: string[] = [
-          'a.master_id IS NULL' // Step 2: Always filter for master assets
+          'a.master_id IS NULL' // Always filter for master assets
         ];
         const queryParams: (string | number)[] = [];
 
@@ -163,22 +171,56 @@ app.whenReady().then(() => {
             query += ` ORDER BY a.${sortBy} ${sortOrder === 'ASC' ? 'ASC' : 'DESC'}`;
         }
 
-        const assetsFromDb = db.prepare(query).all(...queryParams) as Asset[]; // Renamed to avoid conflict
+        // Step 1: Add GROUP BY clause due to aggregate functions
+        query += ` GROUP BY a.id`;
+
+        // Step 1: Adjust sorting logic - need to re-apply ORDER BY *after* GROUP BY
+        // If sorting by calculated fields, we need to use the alias or recalculate here.
+        // Simple approach: Re-apply sorting based on original columns for now.
+        // Complex sorting (by versionCount/accumulatedShares) would require modifying the ORDER BY clause.
+        // Reset query and rebuild with GROUP BY and ORDER BY at the end
+
+        query = `
+          SELECT
+            a.id, a.fileName, a.filePath, a.mimeType, a.size, a.createdAt,
+            a.year, a.advertiser, a.niche, a.shares, a.master_id, a.version_no,
+            a.shares + COALESCE(SUM(v.shares), 0) AS accumulatedShares,
+            1 + COUNT(v.id) AS versionCount
+          FROM assets a
+          LEFT JOIN assets v ON v.master_id = a.id
+        `;
+
+        if (whereClauses.length > 0) {
+            query += ' WHERE ' + whereClauses.join(' AND ');
+        }
+
+        query += ` GROUP BY a.id`; // Apply GROUP BY
+
+        // Re-apply Sorting (ensure valid columns are used)
+        if (validSortColumns.includes(sortBy)) {
+             query += ` ORDER BY a.${sortBy} ${sortOrder === 'ASC' ? 'ASC' : 'DESC'}`;
+        }
+        // If sorting by accumulatedShares or versionCount is needed later, adjust ORDER BY here
+        // Example: query += ` ORDER BY accumulatedShares ${sortOrder === 'ASC' ? 'ASC' : 'DESC'}`;
+
+        const assetsFromDb = db.prepare(query).all(...queryParams) as Asset[];
 
       const assetsWithThumbnails: AssetWithThumbnail[] = [];
       // Iterate and add thumbnail path if it exists
-      for (const asset of assetsFromDb) { // Use renamed variable
+      for (const asset of assetsFromDb) {
         const thumbnailPath = await getExistingThumbnailPath(asset.id);
             // Ensure shares is a number or null
             const sharesAsNumber = typeof asset.shares === 'string' ? parseInt(asset.shares, 10) : asset.shares;
-            // The accumulatedShares should already be a number from SQL SUM/COALESCE
-            const accumulatedShares = (asset as any).accumulatedShares; // Cast to access the calculated field
+            // Step 1: Get calculated fields from the result row
+            const accumulatedShares = (asset as any).accumulatedShares;
+            const versionCount = (asset as any).versionCount;
 
             assetsWithThumbnails.push({ 
                 ...asset, 
-                shares: isNaN(sharesAsNumber as number) ? null : sharesAsNumber, // Handle potential NaN from parseInt
-                accumulatedShares: typeof accumulatedShares === 'number' ? accumulatedShares : null, // Ensure type or null
-                thumbnailPath 
+                shares: isNaN(sharesAsNumber as number) ? null : sharesAsNumber,
+                accumulatedShares: typeof accumulatedShares === 'number' ? accumulatedShares : null,
+                versionCount: typeof versionCount === 'number' ? versionCount : null,
+                thumbnailPath
             });
       }
         
@@ -245,7 +287,8 @@ app.whenReady().then(() => {
           master_id: null, // New assets are masters
           version_no: 1,   // New assets are version 1
           thumbnailPath: null, // Thumbnail generated async
-          accumulatedShares: null // Initially same as shares (null)
+          accumulatedShares: null, // Initially same as shares (null)
+          versionCount: null
         }
       };
 
@@ -316,7 +359,8 @@ app.whenReady().then(() => {
                   master_id: null, 
                   version_no: 1,
                   thumbnailPath: null,
-                  accumulatedShares: null 
+                  accumulatedShares: null,
+                  versionCount: null
               }
           };
 

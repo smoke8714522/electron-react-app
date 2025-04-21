@@ -13,6 +13,12 @@ export interface Asset {
   niche: string | null;
   shares: number | null; // Renamed from adspower, now numeric
   // Custom fields will be handled in a separate table
+  // PRD: Added for versioning
+  master_id?: number | null;
+  version_no?: number;
+  // Step 2: Add fields calculated by get-assets
+  versionCount?: number | null;
+  accumulatedShares?: number | null;
 }
 
 // PRD §4.2 Data Model - Define Custom Field structure

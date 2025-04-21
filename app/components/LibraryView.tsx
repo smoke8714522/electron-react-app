@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 // Removed useAssets import as props are now passed down
-import { AssetWithThumbnail, BulkImportResult, UpdateAssetPayload, BatchUpdateResult, FetchFilters, FetchSort, GetVersionsResult, CreateVersionResult, AddToGroupResult, RemoveFromGroupResult } from '../hooks/useAssets'; 
+import { AssetWithThumbnail, BulkImportResult, /* Unused: UpdateAssetPayload, */ BatchUpdateResult, FetchFilters, FetchSort /* Unused: GetVersionsResult, CreateVersionResult, AddToGroupResult, RemoveFromGroupResult */ } from '../hooks/useAssets';
 // Assuming react-icons is installed for a better UX
 import { 
     FiFilter, FiRefreshCw, FiGrid, FiList, FiChevronLeft, FiChevronRight, FiUploadCloud, 
@@ -616,8 +616,15 @@ const AssetCard: React.FC<AssetCardProps> = ({ asset, isSelected, onSelect, onHi
         onHistory(asset.id);
     };
 
-    const displayAccumulatedShares = asset.accumulatedShares != null && asset.accumulatedShares !== asset.shares;
-    const displayVersionBadge = asset.version_no != null && asset.version_no > 1;
+    // Step 3: Determine display logic based on versionCount
+    const hasVersions = asset.versionCount != null && asset.versionCount > 1;
+
+    // Step 3: Define display shares based on version count
+    const displayShares = hasVersions
+        ? asset.accumulatedShares
+        : asset.shares;
+    const displaySharesFormatted = displayShares?.toLocaleString() ?? '-';
+    const sharesLabel = "Shares"; // Always use "Shares"
 
     return (
         <div 
@@ -636,25 +643,15 @@ const AssetCard: React.FC<AssetCardProps> = ({ asset, isSelected, onSelect, onHi
 
             {/* Version Badges - Positioned top-right */} 
             <div className="absolute top-2 right-2 z-10 flex flex-col items-end space-y-1">
-                {displayAccumulatedShares && (
-                    <span 
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-600 text-purple-100 shadow"
-                        data-tooltip-id="asset-card-tooltip"
-                        data-tooltip-content={`Accumulated Shares: ${asset.accumulatedShares?.toLocaleString()}`}
-                    >
-                        <FiShare2 className="mr-1" size={12}/> 
-                        {asset.accumulatedShares?.toLocaleString()}
-                    </span>
-                )}
-                 {displayVersionBadge && (
-                    <span 
-                        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-600 text-teal-100 shadow"
-                        data-tooltip-id="asset-card-tooltip"
-                        data-tooltip-content={`Version: ${asset.version_no}`}
-                    >
-                        <FiGitBranch className="mr-1" size={12}/> v{asset.version_no}
-                    </span>
-                 )}
+                 {/* Step 3: Always display version count badge, showing 'v1' if no versions */}
+                 <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium shadow ${hasVersions ? 'bg-teal-600 text-teal-100' : 'bg-gray-600 text-gray-200'}`}
+                    data-tooltip-id="asset-card-tooltip"
+                    data-tooltip-content={hasVersions ? `Versions: ${asset.versionCount}` : 'Master Asset (v1)'}
+                >
+                    <FiGitBranch className="mr-1" size={12}/>
+                    {asset.versionCount ?? 1} {/* Show count, default to 1 */}
+                </span>
             </div>
 
             {/* Thumbnail Area */} 
@@ -684,7 +681,15 @@ const AssetCard: React.FC<AssetCardProps> = ({ asset, isSelected, onSelect, onHi
                     <p className="truncate" title={`Year: ${asset.year || 'N/A'}`}>Year: {asset.year || '-'}</p>
                     <p className="truncate" title={`Advertiser: ${asset.advertiser || 'N/A'}`}>Adv: {asset.advertiser || '-'}</p>
                     <p className="truncate" title={`Niche: ${asset.niche || 'N/A'}`}>Niche: {asset.niche || '-'}</p>
-                    <p className="truncate" title={`Shares: ${asset.shares?.toLocaleString() || 'N/A'}`}>Shares: {asset.shares?.toLocaleString() ?? '-'}</p>
+                    {/* Display conditional shares value and label */}
+                    <p
+                        className="truncate"
+                        title={`${sharesLabel}: ${displaySharesFormatted}${hasVersions ? ' (Accumulated)' : ''}`}
+                        data-tooltip-id="asset-card-tooltip"
+                        data-tooltip-content={`${sharesLabel}: ${displaySharesFormatted}${hasVersions ? ' (Accumulated: Master + Versions)' : ''}`}
+                    >
+                        {sharesLabel}: {displaySharesFormatted}
+                    </p>
                 </div>
             </div>
 

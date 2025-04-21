@@ -43,6 +43,8 @@ export interface Asset {
   shares: number | null; // Renamed from adspower, now numeric
   master_id?: number | null; // Foreign key to the master asset
   version_no?: number; // Version number within the group
+  versionCount?: number | null; // Total count of versions (including self if counted in backend)
+  accumulatedShares?: number | null; // Total shares including versions
 }
 
 // PRD §4.1 Library View: Define the fields available for bulk editing
@@ -52,8 +54,10 @@ export type BulkUpdatePayload = Partial<EditableAssetFields>;
 // PRD §4.1 Library View: Extend Asset with optional thumbnail path for UI
 export interface AssetWithThumbnail extends Asset {
   thumbnailPath?: string | null;
-  accumulatedShares?: number | null; // Total shares including versions
-  version_no?: number; // Version number of this specific record
+  // Ensure these are repeated/included here if not automatically inherited
+  // (though they should be due to `extends Asset`)
+  // accumulatedShares?: number | null;
+  // versionCount?: number | null;
 }
 
 // Result type for create-asset IPC call
