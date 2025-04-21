@@ -57,8 +57,9 @@ The project follows a structure separating the Electron main process, the React 
     *   Contains the `initializeDatabase` function for `assets` and `custom_fields` tables. Includes migration logic to rename `adspower` column to `shares`.
 *   **Thumbnail Service**: `lib/main/ThumbnailService.ts`
     *   Provides `generateThumbnail(assetId, sourcePath)`, `deleteThumbnail(assetId)`, `getExistingThumbnailPath(assetId)` functions.
-    *   Uses `sharp` to generate JPEG thumbnails (resized to 400px width, quality 90).
-    *   Thumbnails are saved to `public/cache/thumbnails/<asset-id>.jpg` and served by Vite at `/cache/thumbnails/<asset-id>.jpg` via `publicDir`.
+    *   Uses `sharp` for images, `ffmpeg-static` for video thumbnails, and `pdf-thumbnail` (requires ImageMagick & Ghostscript installed) for PDFs.
+    *   If generation fails or unsupported format, returns `null` and renderer should display a placeholder icon.
+    *   Thumbnails are saved to `public/cache/thumbnails/<asset-id>.jpg`.
 *   **IPC Handlers**: Defined in `lib/main/main.ts` using `ipcMain.handle`:
     *   `get-assets`: Fetches asset metadata. 
         *   Accepts optional `params: { filters?: AssetFilters, sort?: AssetSort }`.
@@ -133,4 +134,4 @@ The project follows a structure separating the Electron main process, the React 
 *   **Path Handling**: `path.win32.join` for DB paths, `path.join` otherwise.
 *   **UI Layout**: `App.tsx` uses `flex flex-col h-screen w-screen` for full window layout. `LibraryView.tsx` uses `flex` for its two-pane layout, with the sidebar width controlled by state and the main content area managing its own scrolling. Tailwind CSS used throughout.
 *   **Error Handling**: Basic error handling in IPC/hooks. `bulk-import-assets`/`bulkUpdateAssets` return errors. Thumbnail errors logged.
-*   **Dependencies**: `electron`, `react`, `better-sqlite3`, `@electron-toolkit/utils`, `mime-types`, `react-icons`. External tools (`ffmpeg`, `pdftocairo`) needed for some thumbnails.
+*   **Dependencies**: `electron`, `react`, `better-sqlite3`, `@electron-toolkit/utils`, `mime-types`, `react-icons`, `ffmpeg-static`, `pdf-thumbnail`. External tools (`ffmpeg`, `pdftocairo`, `ImageMagick`, `Ghostscript`) needed for some thumbnails.

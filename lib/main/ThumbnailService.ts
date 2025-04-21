@@ -1,12 +1,17 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { spawn } from 'child_process';
+// @ts-ignore: ffmpeg-static doesn't ship types
+import ffmpegPath from 'ffmpeg-static';
+// @ts-ignore: pdf-thumbnail missing types
+const pdfThumbnail = require('pdf-thumbnail');
+// @ts-ignore: sharp doesn't ship types
+import sharp from 'sharp';
+import { execFile } from 'child_process';
 
 // Thumbnail service uses static public cache directory; no Electron `app` needed
 
 // Serve thumbnails from root-level public/cache/thumbnails
 const cacheDir = path.join(__dirname, '..', '..', 'public', 'cache', 'thumbnails');
-console.log('📁 Thumbnail public cache directory is', cacheDir);
 
 // Ensure cache directory exists
 const ensureCacheDir = async (): Promise<void> => {
@@ -25,54 +30,52 @@ const getCachePath = (assetId: number): string => {
     return path.join(cacheDir, `${assetId}.jpg`);
 };
 
-// Load sharp at runtime to preserve native bindings
-const requireSharp = (): typeof import('sharp') => {
-  try { return require('sharp'); }
-  catch (err) {
-    console.error('Failed to require sharp:', err);
-    throw err;
-  }
-};
-
-// Supported extensions
+// Supported extensions for images and videos
 const IMAGE_EXTS = ['.jpg','.jpeg','.png','.webp','.avif','.tiff','.gif','.svg'];
 const VIDEO_EXTS = ['.mp4','.mov','.avi','.mkv','.webm'];
 
 // PRD §4.3 Thumbnail Service: Generate thumbnail for an asset
 export const generateThumbnail = async (assetId: number, sourcePath: string): Promise<string | null> => {
-    console.log('🔍 generateThumbnail start', assetId, sourcePath);
+    // Generate thumbnail for supported asset types
     const outputPath = getCachePath(assetId);
-    console.log('→ will write to', outputPath);
     // Ensure the thumbnail directory exists before writing
     await fs.mkdir(cacheDir, { recursive: true });
     try {
         const ext = path.extname(sourcePath).toLowerCase();
         if (IMAGE_EXTS.includes(ext)) {
-            const sharpLib = requireSharp();
-            await sharpLib(sourcePath)
+            await sharp(sourcePath)
                 .resize({ width: 400, withoutEnlargement: true })
                 .jpeg({ quality: 90 })
                 .toFile(outputPath);
         } else if (VIDEO_EXTS.includes(ext)) {
-            await new Promise((resolve, reject) => {
-                const proc = spawn('ffmpeg', ['-y', '-i', sourcePath, '-ss', '00:00:01', '-frames:v', '1', outputPath]);
-                proc.on('error', reject);
-                proc.on('close', code => code === 0 ? resolve(null) : reject(new Error(`ffmpeg exited with code ${code}`)));
+            await new Promise<void>((resolve, reject) => {
+                // Use execFile to avoid shell quoting issues on Windows
+                const exePath = ffmpegPath as string;
+                const args = [
+                    '-y', '-hide_banner', '-loglevel', 'error',
+                    '-ss', '1', '-i', sourcePath,
+                    '-frames:v', '1', '-q:v', '2',
+                    '-vf', 'scale=400:-1',
+                    outputPath
+                ];
+                execFile(exePath, args, { windowsHide: true }, (error) => {
+                    if (error) return reject(error);
+                    resolve();
+                });
             });
         } else if (ext === '.pdf') {
-            await new Promise((resolve, reject) => {
-                const prefix = outputPath.replace(/\.jpg$/, '');
-                const proc = spawn('pdftocairo', ['-jpeg', '-singlefile', '-scale-to', '400', sourcePath, prefix]);
-                proc.on('error', reject);
-                proc.on('close', code => code === 0 ? resolve(null) : reject(new Error(`pdftocairo exited with code ${code}`)));
-            });
+            // Generate PDF thumbnail via pdf-thumbnail (requires ImageMagick & Ghostscript)
+            const pdfBuf = await fs.readFile(sourcePath);
+            const imgStream = await pdfThumbnail(pdfBuf, { compress: { type: 'JPEG', quality: 90 }, resize: { width: 400 } });
+            const chunks: Buffer[] = [];
+            for await (const chunk of imgStream) chunks.push(chunk as Buffer);
+            await fs.writeFile(outputPath, Buffer.concat(chunks));
         } else {
-            throw new Error(`Unsupported extension ${ext}`);
+            return null;
         }
-        console.log('✅ wrote thumbnail file at', outputPath);
         return `/cache/thumbnails/${assetId}.jpg`;
     } catch (error) {
-        console.error(`Failed to generate thumbnail for asset ${assetId}:`, error);
+        console.error(`❌ generateThumbnail failed for asset ${assetId}`, error);
         try { await fs.unlink(outputPath); } catch {}
         return null;
     }
@@ -83,7 +86,6 @@ export const deleteThumbnail = async (assetId: number): Promise<void> => {
     const cachePath = getCachePath(assetId);
     try {
         await fs.unlink(cachePath);
-        console.log(`Deleted cached thumbnail for asset ${assetId}: ${cachePath}`);
     } catch (error: any) {
         if (error.code === 'ENOENT') {
             // File doesn't exist, which is fine
