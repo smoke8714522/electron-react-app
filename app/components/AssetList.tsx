@@ -3,16 +3,18 @@ import AssetListRow from './AssetListRow';
 import { AssetWithThumbnail, FetchSort } from '../hooks/useAssets';
 import { FiChevronUp, FiChevronDown } from 'react-icons/fi';
 
-// Define Sortable Columns Type
-type SortableColumn = FetchSort['sortBy'];
+// Define Sortable Columns Type (non-optional for active sorting)
+type SortableColumn = Extract<FetchSort['sortBy'], 'fileName' | 'year' | 'shares' | 'accumulatedShares' | 'createdAt'>;
 
 interface AssetListProps {
     assets: AssetWithThumbnail[];
     selectedAssetIds: Set<number>;
     onSelect: (assetId: number, isSelected: boolean) => void;
     onHistory: (masterId: number) => void;
-    sortConfig: { sortBy: SortableColumn; sortOrder: FetchSort['sortOrder'] };
-    handleSort: (sortByValue: SortableColumn) => void; // Expects a function that toggles based on column key
+    // Adjust sortConfig to allow potentially undefined sort (though LibraryView provides defaults)
+    sortConfig: { sortBy?: SortableColumn; sortOrder?: FetchSort['sortOrder'] }; 
+    // Ensure handleSort expects a defined SortableColumn as passed by LibraryView
+    handleSort: (sortByValue: SortableColumn) => void; 
     handleSelectAll: (isSelected: boolean) => void;
     isAllSelected: boolean;
 }

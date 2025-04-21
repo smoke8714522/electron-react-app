@@ -9,7 +9,7 @@ The project follows a structure separating the Electron main process, the React 
 ```
 /
 ├── app/                  # React Renderer Source Code
-│   ├── components/       # React Components (e.g., App.tsx, LibraryView.tsx, BulkEditModal.tsx)
+│   ├── components/       # React Components (e.g., App.tsx, LibraryView.tsx, BulkEditModal.tsx, SidebarFilters.tsx)
 │   ├── hooks/            # React Hooks (e.g., useAssets.ts)
 │   ├── services/         # Renderer-specific services (if any)
 │   ├── styles/           # CSS Styles (app.css, tailwind.css)
@@ -57,154 +57,101 @@ The project follows a structure separating the Electron main process, the React 
     *   Defines the `CustomField` TypeScript interface.
     *   Contains the `initializeDatabase` function for `assets` and `custom_fields` tables. Includes migration logic to rename `adspower` column to `shares` and add version control columns.
 *   **Version Control & Grouping (Database Schema)**: Implemented in `main/schema.ts`.
-    *   `assets` table includes:
-        *   `master_id` (INTEGER, NULL, FK -> assets.id ON DELETE SET NULL): Links an asset version to its original master asset.
-        *   `version_no` (INTEGER, NOT NULL, DEFAULT 1): Tracks the version number within a group of related assets.
-    *   An index `idx_assets_master` is created on `master_id` for efficient querying of asset versions.
-    *   A composite index `idx_assets_master_version` is created on `(master_id, version_no)` for efficient querying and ordering of versions within a group.
-    *   Database migrations are handled in `initializeDatabase` using `PRAGMA user_version`.
-    *   The `get-assets` IPC handler now filters results using `WHERE a.master_id IS NULL` to return only master assets by default.
-    *   The `get-assets` IPC handler calculates and returns a new field `accumulatedShares`. This represents the sum of the `shares` value of the master asset itself plus the `shares` values of all its associated versions (assets linked via `master_id`). The SQL calculation is: `a.shares + COALESCE(SUM(v.shares), 0) AS accumulatedShares`.
-    *   The `get-assets` IPC handler also calculates and returns a new field `versionCount`. This represents the total number of assets in a version group (the master plus all its versions). The SQL calculation is `1 + COUNT(v.id) AS versionCount`. These calculations are performed using a `LEFT JOIN` from the `assets` table (aliased as `a`) to itself (aliased as `v`) on `v.master_id = a.id`, followed by a `GROUP BY a.id`.
-    *   **UI**:
-        *   The main asset gallery (`LibraryView.tsx`) displays **only master assets** (those with `master_id IS NULL`).
-        *   Each master asset card (`AssetCard.tsx`) displays:
-            *   A **Version Count badge** (e.g., `[Icon] 3`) in the top-right corner, showing the total number of assets in the group (`versionCount`). Displays `1` for standalone master assets. Uses the native HTML `title` attribute for hover details.
-            *   A **Shares label** in the main content area, always labeled "Shares:". If `versionCount > 1`, the displayed value is the `accumulatedShares` (total of master + versions). Otherwise, it displays the master's own `shares`. Values are formatted with `toLocaleString()`. The native HTML `title` attribute clarifies if the displayed value is accumulated.
-            *   A **History button** (clock icon) in the card footer. Clicking this button triggers the `onHistory` prop in `LibraryView.tsx`.
-        *   `LibraryView.tsx` manages state (`historyMasterId`, `isHistoryModalOpen`) to control the `VersionHistoryModal`. It passes the `masterId` and `onClose` handler to the modal.
-        *   The List view (`AssetList.tsx`, rendered by `LibraryView.tsx`) displays the `accumulatedShares` value and includes a History button per row (`AssetListRow.tsx`), triggering the same `onHistory` handler from `LibraryView.tsx`. *(Note: List view might need updating to show `versionCount`)*.
-        *   **Version History Modal** (`app/components/VersionHistoryModal.tsx`):
-            *   Props: `{ masterId: number | null; isOpen: boolean; onClose: () => void }`.
-            *   Applies **dark mode styling** using Tailwind CSS (`bg-gray-900`, `text-gray-100`, etc.) for the modal container, header, body, and footer, ensuring legibility.
-            *   Fetches and displays a list of all assets associated with the given `masterId` (using `getVersions` hook) in a table.
-            *   Table includes columns: Checkbox, Preview, Filename, Type, Size, Created, Year, Advertiser, Niche, Shares, Version (`vX`).
-            *   Supports multi-select via checkboxes in the table header (select-all) and each row.
-            *   Includes a **footer action bar** (`bg-gray-800`) with buttons:
-                *   **Add Version** (`<FiUploadCloud>`): Uses `window.api.openFileDialog` to open a file dialog; on selection, calls `createVersion(masterId, sourcePath)`. Disabled if `!masterId` or loading.
-                *   **Promote Selected** (`<FiChevronsUp>`): Calls `promoteVersion(versionId)` after confirmation. Disabled unless exactly one version is selected.
-                *   **Remove From Group** (`<FiCornerUpLeft>`): Calls `removeFromGroup(versionId)` for each selected item after confirmation. Disabled unless at least one version is selected.
-                *   **Bulk Edit** (`<FiEdit>`): Opens the `BulkEditModal` component. Disabled unless at least one version is selected.
-                *   **Delete Selected** (`<FiTrash2>`): Calls `deleteAsset(versionId)` for each selected item after confirmation. Disabled unless at least one version is selected.
-            *   All buttons use `react-tooltip` for hints and have appropriate `disabled` states based on selection count and loading status.
-            *   Destructive actions (Promote, Remove, Delete) use `window.confirm()` before proceeding.
-            *   After successful actions (Add, Promote, Remove, Bulk Edit Save, Delete), the modal refreshes its own version data (`fetchVersionsData`) and triggers a refresh of the main library view (`fetchAssets`) to ensure consistency.
-            *   Calls the `onClose` prop when the close button (top right) is clicked.
-            *   Manages internal loading and error states.
+    *   `assets` table includes: `master_id` (INTEGER, NULL, FK -> assets.id ON DELETE SET NULL), `version_no` (INTEGER, NOT NULL, DEFAULT 1).
+    *   Indices `idx_assets_master` and `idx_assets_master_version` facilitate version querying.
+    *   Database migrations handle schema changes via `PRAGMA user_version`.
+    *   `get-assets` IPC handler uses `LEFT JOIN` and `GROUP BY a.id` to calculate `accumulatedShares` and `versionCount` for master assets (`WHERE a.master_id IS NULL`).
+    *   **UI Implications**: `LibraryView.tsx` displays only master assets. `AssetCard.tsx` shows `versionCount` badge and conditional `accumulatedShares` value. `AssetList.tsx` shows `accumulatedShares`. History buttons trigger `VersionHistoryModal.tsx`.
+*   **Version History Modal** (`app/components/VersionHistoryModal.tsx`):
+    *   Props: `{ masterId: number | null; isOpen: boolean; onClose: () => void }` plus various action handlers passed from `LibraryView.tsx` via `useAssets` hook (e.g., `getVersions`, `createVersion`, `deleteAsset`, etc.).
+    *   Fetches versions using `getVersions`. Displays in a table (Checkbox, Preview, Filename, Type, Size, Created, Year, Advertiser, Niche, Shares, Version).
+    *   Supports multi-select and footer actions (Add Version, Promote Selected, Remove From Group, Bulk Edit, Delete Selected) with appropriate confirmations and disabled states.
+    *   Applies dark mode styling (`bg-gray-900`, etc.)
+    *   Refreshes its own data and triggers main library refresh (`fetchAssets`) after successful actions.
 *   **Thumbnail Service**: `lib/main/ThumbnailService.ts`
-    *   Provides `generateThumbnail(assetId, sourcePath)`, `deleteThumbnail(assetId)`, `getExistingThumbnailPath(assetId)` functions.
-    *   Uses `sharp` for images, `ffmpeg-static` for videos, and the ImageMagick CLI (`magick`) + Ghostscript for PDF thumbnails.
-    *   If generation fails or unsupported format, returns `null` and renderer should display a placeholder icon.
-    *   Thumbnails are saved to `public/cache/thumbnails/<asset-id>.jpg`.
-*   **IPC Handlers**: Defined in `lib/main/main.ts` using `ipcMain.handle`:
-    *   `get-assets`: Fetches asset metadata. Now filters to return **only master assets** (`master_id IS NULL`).
-        *   Uses a `LEFT JOIN` with the `assets` table itself to calculate aggregate version data.
-        *   Accepts optional `params: { filters?: AssetFilters, sort?: AssetSort }`.
-        *   `AssetFilters`: `{ year?: number | null, advertiser?: string | null, niche?: string | null, sharesMin?: number | null, sharesMax?: number | null }`. (Note: `shares` filter currently applies to the master asset's own `shares` value, not the accumulated value).
-        *   `AssetSort`: `{ sortBy?: 'fileName' | 'year' | 'shares' | 'createdAt' | 'accumulatedShares', sortOrder?: 'ASC' | 'DESC' }`. (**Updated:** Added `accumulatedShares`).
-        *   Dynamically builds SQL query based on filters and sorting, including the `WHERE a.master_id IS NULL` clause and a `GROUP BY a.id` clause.
-        *   **Sorting**: The `ORDER BY` clause now correctly supports sorting by `a.fileName`, `a.year`, `a.shares`, `a.createdAt`, and the calculated `accumulatedShares` alias.
-        *   Returns `Promise<AssetWithThumbnail[]>` including:
-            *   Standard asset fields.
-            *   An optional `thumbnailPath` (static `/cache/thumbnails/<asset-id>.jpg`) if cached.
-            *   Ensures `shares` is `number | null`.
-            *   A calculated field `accumulatedShares: number | null`, representing the total shares of the master and all its versions.
-            *   A calculated field `versionCount: number | null`, representing the total number of assets in the version group (master + versions).
-    *   `open-file-dialog`: Opens a file picker via Electron's `dialog.showOpenDialog`; returns `{ canceled: boolean, filePaths: string[] }`.
-    *   `create-asset`: Takes a source file path, copies the file to the vault (using `path.win32` for relative DB path), generates unique name (hash-based), extracts metadata, inserts into `assets` table (setting `master_id` to `NULL` and `version_no` to `1` for new assets), and asynchronously triggers thumbnail generation. Returns `{ success: boolean, asset?: AssetWithThumbnail, error?: string }`. The returned asset includes `accumulatedShares` (which will initially just be the master's own shares) and `versionCount` (initially null or 1).
-    *   `bulk-import-assets`: Opens a multi-select file dialog (using Electron's `dialog.showOpenDialog` internally). For each valid file, performs the same actions as `create-asset` (creating new master assets). Returns `{ success: boolean, importedCount: number, assets?: AssetWithThumbnail[], errors: { file: string, error: string }[] }`.
-    *   `update-asset`: Takes `{ id: number, updates: { ... } }`. Updates `assets` (including `shares`) and `custom_fields` tables atomically. Ensures `shares` and `year` are stored as numbers or null. Returns `Promise<boolean>`. (Note: Currently updates only the specific asset record provided, not versions).
-    *   `delete-asset`: Takes an asset ID (`number`). Deletes the asset record from the `assets` table (cascades to `custom_fields`), the corresponding file from the vault, and the cached thumbnail. Returns `Promise<boolean>`. (Note: Deleting a master asset *does not* currently delete its versions automatically; versions remain linked via `master_id` which might become invalid. Deleting a version only deletes that specific version).
-    *   `create-version`: Takes `{ masterId: number, sourcePath: string }`. Checks `sourcePath` exists. Copies the file into the vault, generates a unique path. Fetches metadata from the specified `masterId` asset (ensuring it *is* a master). Determines the next available `version_no` for that master. Inserts a new `assets` record cloning the master's metadata (filename, year, advertiser, niche, shares) but with the new file path, size, mimeType, createdAt, the master's ID set in `master_id`, and the calculated `version_no`. File copy/metadata retrieval happens outside transaction, DB insert/version number calculation inside. Triggers thumbnail generation asynchronously for the new version asset. Returns `Promise<{ success: boolean, newId?: number, error?: string }>`.
-    *   `get-versions`: Takes `{ masterId: number }`. Fetches all asset records where `master_id` equals the provided `masterId`, ordered by `version_no` descending. Adds the `thumbnailPath` to each asset record if available. Returns `Promise<{ success: boolean, assets?: AssetWithThumbnail[], error?: string }>`. (Note: `accumulatedShares` is not calculated/returned for individual versions here).
-    *   `add-to-group`: Takes `{ versionId: number, masterId: number }`. Verifies within a transaction that `versionId` exists and is currently a master asset (`master_id IS NULL`) and that `masterId` also exists and is a master asset. Updates the asset record with `id = versionId` to set its `master_id` to `masterId` and calculates the next available `version_no` within that master's group using a subquery (`SELECT COALESCE(MAX(v.version_no), 0) + 1 FROM assets v WHERE v.master_id = ?`). Returns `Promise<{ success: boolean, error?: string }>`.
-    *   `remove-from-group`: Takes `{ versionId: number }`. Verifies within a transaction that the asset exists and is currently a version (`master_id IS NOT NULL`). Updates the asset record with `id = versionId` to set its `master_id` to `NULL` and resets its `version_no` to `1`, effectively making it a standalone master asset again. Returns `Promise<{ success: boolean, error?: string }>`. If the asset is already a master, it returns success without making changes.
-    *   `promote-version`: Takes `{ versionId: number }`. **Stub handler that currently returns `{ success: true }`.** (Future implementation: Promote the specified version to be the new master of its group, potentially swapping data with the current master and updating `master_id` and `version_no` for other versions). The corresponding hook (`useAssets().promoteVersion`) calls this and refreshes the asset list.
+    *   Generates thumbnails using `sharp` (images), `ffmpeg-static` (videos), `magick` CLI + Ghostscript (PDFs).
+    *   Saves to `public/cache/thumbnails/<asset-id>.jpg`.
+*   **IPC Handlers**: Defined in `lib/main/main.ts`.
+    *   `get-assets`: Fetches master assets (`a.master_id IS NULL`), calculates `accumulatedShares`, `versionCount`. Accepts filters (`year`, `advertiser`, `niche`, `sharesMin`, `sharesMax`) and sorting (`fileName`, `year`, `shares`, `createdAt`, `accumulatedShares`). Returns `Promise<AssetWithThumbnail[]>`. Note: `shares` filter uses the master's own `shares`, not accumulated.
+    *   `open-file-dialog`: Opens file picker.
+    *   `create-asset`: Copies file, extracts metadata, inserts as master (`master_id = NULL`, `version_no = 1`), triggers thumbnail generation. Returns `Promise<{ success, asset?, error? }>`. Result includes `accumulatedShares` (master's own initially) and `versionCount` (1 initially).
+    *   `bulk-import-assets`: Multi-select dialog, calls `create-asset` logic for each file. Returns `Promise<{ success, importedCount, assets?, errors[] }>`. 
+    *   `update-asset`: Updates single asset record.
+    *   `delete-asset`: Deletes single asset record, file, and thumbnail. Does *not* cascade to versions.
+    *   `create-version`: Copies file, clones master metadata, inserts new asset record with `master_id` set and next `version_no`. Triggers thumbnail generation. Returns `Promise<{ success, newId?, error? }>`. 
+    *   `get-versions`: Fetches all assets with a specific `master_id`. Returns `Promise<{ success, assets?, error? }>`. 
+    *   `add-to-group`: Sets `master_id` and `version_no` on an existing master asset to make it a version of another master. Returns `Promise<{ success, error? }>`. 
+    *   `remove-from-group`: Sets `master_id = NULL`, `version_no = 1` on a version asset, making it a master again. Returns `Promise<{ success, error? }>`. 
+    *   `promote-version`: **Stub handler.** Returns `Promise<{ success: true }>`. 
 *   **Electron Preload Script**: `lib/preload/preload.ts` (with helpers in `lib/preload/api.ts`)
-    *   Exposes a generic `api` object with an `invoke` method.
-    *   Also exposes specific typed methods for many common IPC calls via the `api` object (e.g., `api.getAssets`, `api.createAsset`, `api.openFileDialog`, `api.createVersion`, `api.getVersions`, `api.addToGroup`, `api.removeFromGroup`, `api.promoteVersion`). Renderer code can use either the generic `invoke` or these specific, typed methods.
+    *   Exposes `window.api` with typed methods (e.g., `api.getAssets`, `api.createAsset`) and a generic `invoke`.
 *   **React App Entry**: `app/renderer.tsx`
     *   Renders the main React component (`App`).
 *   **Main React Component**: `app/components/App.tsx`
-    *   Top-level UI component using Tailwind CSS.
-    *   Implements a simple top navigation bar ("Ad Vault" title + tabs) to switch between views ('Dashboard' and 'Library'). Navigation is edge-to-edge.
-    *   Conditionally renders either the original basic asset list/edit view (as 'Dashboard') or the `LibraryView` based on selected tab state.
-    *   Root element uses Flexbox (`h-full w-full`) to ensure the layout fills the entire window edge-to-edge without extra padding or child overflow (PRD §5 Non-Functional Requirements). Main content area handles scrolling.
+    *   Top-level UI, Tailwind CSS, Flexbox for edge-to-edge layout.
+    *   Simple top navigation bar to switch between 'Dashboard' (basic view) and 'Library' (`LibraryView`).
 *   **Main Library View Component**: `app/components/LibraryView.tsx` (Refactored)
-    *   Main view for browsing and managing assets, styled with Tailwind CSS.
-    *   Features a two-pane layout implemented with Flexbox (PRD §4.1 Library View):
-        *   **Collapsible Left Sidebar** (`<aside>`): Uses `flex flex-col h-full min-h-0`. Width transitions between `w-64` (expanded) and `w-16` (icon-only collapsed state). Contains filter controls:
-            *   **Search Input**: Basic text search (currently unused for backend filtering but available).
-            *   **Year Filter**: Dropdown (`<select>`) populated with distinct years from loaded assets. Allows selecting a specific year or "All Years".
-            *   **Advertiser Filter**: Dropdown (`<select>`) populated with distinct advertisers from loaded assets. Allows selecting a specific advertiser or "All Advertisers".
-            *   **Niche Filter**: Dropdown (`<select>`) populated with distinct niches from loaded assets. Allows selecting a specific niche or "All Niches".
-            *   **Shares Filter**: Two numeric input fields (`<input type="number">`) for Minimum and Maximum shares. Allows filtering by a range.
-            *   **Tag Filter**: Placeholder for future tag filtering implementation.
-            *   Sidebar content adapts or hides when collapsed. Toggle button in the sidebar header.
-            *   The filter controls section (`div`) within the sidebar uses `overflow-y-auto flex-1 min-h-0` to enable independent scrolling when filters exceed available space.
-        *   **Main Content Area** (`<main>`): Takes remaining width (`flex-1`). Contains a sticky top toolbar and the scrollable asset display area.
-            *   **Sticky Top Toolbar**: Contains main action buttons ("Bulk Import", "Refresh"), a "Sort by" dropdown, a "Grid/List" view toggle, and **conditional batch action controls** that appear when assets are selected (`selectedCount`, "Edit Metadata" button, "Delete Selected" button). Toolbar remains visible when scrolling assets.
-                *   **Sort Dropdown**: Allows sorting by Newest/Oldest (default), FileName (A-Z, Z-A), Year (High-Low, Low-High), Shares (High-Low, Low-High), Total Shares (High-Low, Low-High).
-            *   **Asset Display Area**: Scrollable area (`overflow-y-auto`). Displays assets (fetched based on current filters/sort) using either `AssetGrid.tsx` (rendering `AssetCard` components) or `AssetList.tsx` (rendering a `<table>` with `AssetListRow` components) based on the view toggle state.
-                *   The grid container (`AssetGrid.tsx`) uses `items-start` and `content-start` to prevent cards from stretching vertically.
-                *   The list view table (`AssetList.tsx`) includes a sticky header with sortable columns and a select-all checkbox.
-    *   Implements multi-select functionality via checkboxes on `AssetCard` or within `AssetListRow`. Selected count and batch actions ("Edit Metadata", "Delete Selected") appear in the main content toolbar.
-    *   Triggers `BulkEditModal` when the "Edit Metadata" batch action is clicked.
-    *   Filtering and sorting changes trigger an immediate re-fetch of assets via `useAssets.fetchAssets`.
+    *   Main view for browsing/managing assets, styled with Tailwind.
+    *   Uses `useAssets` hook for state management and actions.
+    *   Features a two-pane layout (Flexbox):
+        *   **Collapsible Left Sidebar** (`<aside>`): Houses the `SidebarFilters` component. Width transitions (`w-64`/`w-16`), controlled by `isSidebarOpen` state. Includes a header with a toggle button.
+        *   **Main Content Area** (`<main>`): Takes remaining width (`flex-1`), manages its own scrolling (`overflow-y-auto`). Contains a sticky top toolbar and the asset display area.
+            *   **Sticky Top Toolbar**: Contains main action buttons ("Bulk Import", "Refresh"), a "Sort by" dropdown, a "Grid/List" view toggle, and conditional batch action controls ("X selected", "Edit Metadata", "Delete Selected").
+            *   **Asset Display Area**: Scrollable (`overflow-y-auto`). Renders either `AssetGrid.tsx` or `AssetList.tsx` based on `viewMode` state.
+    *   Manages asset selection state (`selectedAssetIds`) and controls visibility of `BulkEditModal` and `VersionHistoryModal`.
+    *   Manages filter state (`filters`), sort state (`sort`), and search term state (`searchTerm`). Passes these and relevant handlers down to `SidebarFilters` and other child components.
+    *   Filtering/sorting changes trigger re-fetch via `useEffect` calling `fetchAssets`.
+*   **Sidebar Filters Component**: `app/components/SidebarFilters.tsx` (New)
+    *   **Purpose**: Contains the filter controls previously inline within `LibraryView.tsx`'s sidebar.
+    *   **Location**: `app/components/SidebarFilters.tsx`
+    *   **Props**:
+        *   `isCollapsed: boolean`: Controls rendering for collapsed state (shows icons only).
+        *   `filters: FetchFilters`: The current filter values (year, advertiser, niche, sharesRange).
+        *   `handleFilterChange: (name: keyof FetchFilters, value: any) => void`: Callback to update the filter state in `LibraryView`.
+        *   `distinctYears: number[]`: List of available years for the dropdown.
+        *   `distinctAdvertisers: string[]`: List of available advertisers for the dropdown.
+        *   `distinctNiches: string[]`: List of available niches for the dropdown.
+        *   `searchTerm: string`: Current value for the search input.
+        *   `handleSearchChange: (event: React.ChangeEvent<HTMLInputElement>) => void`: Callback to update the search term state in `LibraryView`.
+    *   **Layout**: Uses Tailwind CSS and Flexbox. The root `div` handles internal padding (`p-4`), spacing (`space-y-4`), and scrolling (`overflow-y-auto flex-1 min-h-0`) for the filter controls. Adheres to the visual style of the original inline filters.
 *   **Asset Grid Component**: `app/components/AssetGrid.tsx` (New)
-    *   Renders a responsive Tailwind CSS grid (`grid grid-cols-1 sm:grid-cols-2 ... 2xl:grid-cols-6`).
-    *   Maps the `assets` prop to `AssetCard` components.
-    *   Passes down `onSelect` and `onHistory` handlers to `AssetCard`.
+    *   Renders a responsive Tailwind CSS grid.
+    *   Maps `assets` prop to `AssetCard` components.
+    *   Passes `onSelect` and `onHistory` handlers down.
 *   **Asset List Component**: `app/components/AssetList.tsx` (New)
-    *   Renders a `<table>` for the list view.
-    *   Includes a sticky `<thead>` with sortable column headers (Filename, Year, Shares, Total Shares) using icons and the `handleSort` prop.
-    *   Includes a select-all checkbox in the header linked to the `handleSelectAll` prop.
-    *   Maps the `assets` prop to `AssetListRow` components in the `<tbody>`.
+    *   Renders a `<table>` with sticky `<thead>`.
+    *   Headers include sort icons/handlers and select-all checkbox.
+    *   Maps `assets` prop to `AssetListRow` components.
 *   **Asset Card Component**: `app/components/AssetCard.tsx` (New)
-    *   Displays a single asset in the grid view, wrapped in `React.memo`.
-    *   Includes thumbnail, key metadata (`fileName`, `year`, `advertiser`, `niche`), conditional shares/accumulated shares, version count badge, history button, and selection checkbox.
-    *   Handles card click for selection and stops propagation for checkbox/button clicks.
-    *   Uses native HTML `title` attribute for hover details on badges/labels.
+    *   Displays single asset in grid. Thumbnail, metadata, conditional shares/accumulated shares, version count badge, history button, selection checkbox.
+    *   Uses HTML `title` for hover details.
 *   **Asset List Row Component**: `app/components/AssetListRow.tsx` (New)
-    *   Renders a single `<tr>` for the list view table.
-    *   Includes cells for selection checkbox, thumbnail, metadata, conditional accumulated shares, and history button.
-    *   Passes selection changes via `onSelect` prop and history clicks via `onHistory` prop.
+    *   Renders a single `<tr>` for the list view.
+    *   Includes cells for checkbox, thumbnail, metadata, shares, history button.
 *   **Bulk Edit Modal Component**: `app/components/BulkEditModal.tsx` (New)
-    *   Modal dialog for batch editing metadata of selected assets (PRD §4.1 Library View), implemented using `react-modal`.
-    *   Displays fields for `year`, `advertiser`, `niche`, `shares`.
-    *   Each field has an associated "Apply" checkbox; only checked fields are included in the update.
-    *   Props:
-        *   `isOpen: boolean`: Controls modal visibility.
-        *   `onClose: () => void`: Callback to close the modal (invoked by `react-modal` on request close).
-        *   `onSave: (updates: BulkUpdatePayload) => Promise<void>`: Callback triggered on save, passing an object with only the checked fields and their values.
-        *   `selectedCount: number`: Displays the number of assets being edited.
-    *   Styled using Tailwind CSS applied via `react-modal` props (`className`, `overlayClassName`).
+    *   `react-modal` dialog for batch editing (`year`, `advertiser`, `niche`, `shares`).
+    *   Uses "Apply" checkboxes for selective updates.
+    *   Props: `isOpen`, `onClose`, `onSave`, `selectedCount`.
 *   **React State Management (Assets)**: `app/hooks/useAssets.ts`
-    *   Custom hook (`useAssets`) managing the list of assets (`AssetWithThumbnail[]`).
-    *   Provides `fetchAssets(filters?: FetchFilters, sort?: FetchSort)`, `bulkImportAssets`, `updateAsset`, `deleteAsset`, `bulkUpdateAssets` functions which invoke corresponding IPC handlers.
-        *   `fetchAssets`: Now accepts optional `filters: { year?, advertiser?, niche?, sharesRange? }` and `sort: { sortBy?, sortOrder? }` objects, passing relevant parameters (`year`, `advertiser`, `niche`, `sharesMin`, `sharesMax`, `sortBy`, `sortOrder`) to the `get-assets` IPC handler. Returns `AssetWithThumbnail[]` which now includes `accumulatedShares` and `versionCount` for master assets.
-            *   **Sorting**: `FetchSort.sortBy` type now includes `'accumulatedShares'`. The `LibraryView.tsx` sort dropdown includes options for "Total Shares (High-Low)" and "Total Shares (Low-High)" which correctly trigger sorting by `accumulatedShares`.
-        *   `updateAsset`: Ensures `year` and `shares` are converted to `number | null` before sending via IPC.
-        *   `bulkUpdateAssets`: Takes `selectedIds: number[]`, `updates: BulkUpdatePayload`. Iterates through `selectedIds`, prepares payload (converting `year`/`shares` to `number | null`), and calls the `update-asset` IPC handler for each. Returns `Promise<BatchUpdateResult>`. Refreshes asset list after completion via `fetchAssets()`.
-    *   Defines types: `Asset` (updated with `master_id`, `version_no`, and calculated `versionCount`, `accumulatedShares`), `AssetWithThumbnail` (updated to include calculated `versionCount`, `accumulatedShares`), `EditableAssetFields`, `BulkUpdatePayload`, `CreateAssetResult`, `BulkImportResult`, `UpdateAssetPayload`, `BatchUpdateResult`, `FetchFilters`, `FetchSort` (**Updated** with `accumulatedShares`).
-    *   **Versioning Hook Functions**: Provides functions (`createVersion`, `getVersions`, `addToGroup`, `removeFromGroup`, `promoteVersion`) that invoke corresponding IPC handlers. These now use `useCallback` and handle loading/error states within the main hook (except `getVersions`, which is designed for direct use by the modal). They call `fetchAssets` to refresh the main list after successful mutations.
-        *   `promoteVersion`: Takes `versionId: number`. Calls the `promote-version` IPC handler. Refreshes the asset list via `fetchAssets` upon success. Returns `Promise<PromoteVersionResult>`.
-    *   **Versioning Result Types**: `CreateVersionResult`, `GetVersionsResult`, `AddToGroupResult`, `RemoveFromGroupResult`, `PromoteVersionResult` are now defined and exported at the top level.
+    *   Custom hook (`useAssets`) manages asset list (`AssetWithThumbnail[]`), loading, and error states.
+    *   Provides functions (`fetchAssets`, `bulkImportAssets`, `updateAsset`, `deleteAsset`, `bulkUpdateAssets`, `createVersion`, `getVersions`, `addToGroup`, `removeFromGroup`, `promoteVersion`) invoking IPC handlers.
+        *   `fetchAssets`: Accepts optional `filters: FetchFilters` and `sort: FetchSort`. Passes params (`year`, `advertiser`, `niche`, `sharesMin`, `sharesMax`, `sortBy`, `sortOrder`) to `get-assets` IPC. Returns `AssetWithThumbnail[]` (including `accumulatedShares`, `versionCount`).
+        *   `updateAsset`, `bulkUpdateAssets`: Handle data conversion (e.g., `number | null`) before IPC.
+        *   Mutation functions (e.g., `deleteAsset`, `createVersion`, `bulkUpdateAssets`) now trigger `fetchAssets` internally after successful IPC calls to refresh the UI automatically.
+    *   Defines types: `Asset`, `AssetWithThumbnail`, `EditableAssetFields`, `BulkUpdatePayload`, `FetchFilters`, `FetchSort`, result types for IPC calls. `FetchFilters` uses `sharesRange: [number | null, number | null]`. `FetchSort` includes `accumulatedShares`.
 
 ## Implementation Notes
 
-*   **Asset Creation/Import**: Initiated via `createAsset` or `bulkImportAssets`. Main process handles file copy, metadata, DB insert (now sets `master_id = NULL`, `version_no = 1`), and async thumbnail generation.
-*   **Asset Update**: The `update-asset` handler allows modifying standard fields and custom fields for a *specific* asset ID.
-*   **Asset Deletion**: Single asset deletion via `deleteAsset` hook/IPC. Batch deletion via `LibraryView` toolbar (for master assets) or `VersionHistoryModal` toolbar (for versions). Deletion targets the specific asset ID provided. Deleting a master *does not* automatically delete its versions.
-*   **Filtering & Sorting**: Implemented in `LibraryView`, triggers `fetchAssets`. `get-assets` IPC handler builds SQL, **always includes `WHERE a.master_id IS NULL`**, uses a `LEFT JOIN` and `GROUP BY a.id` to calculate `versionCount` and `accumulatedShares`. Filtering by `shares` uses the master's own `shares` value. Sorting now supports `fileName`, `year`, `shares` (master's), `createdAt`, and `accumulatedShares`. The UI in `LibraryView.tsx` provides a dropdown to control sorting, including options for total shares.
-*   **File Storage**: Files stored in `/vault/`, DB stores relative `filePath` using Windows separators (`\`).
-*   **Previews/Thumbnails**: Handled by `ThumbnailService`. `get-assets` returns `thumbnailPath`.
-*   **Database**: `better-sqlite3`, `vaultDatabase.db` in user data path. Schema includes migration for `adspower` -> `shares` rename.
-*   **Path Handling**: `path.win32.join` for DB paths, `path.join` otherwise.
-*   **UI Layout**: `App.tsx` root container uses `h-full w-full` and `<main>` element uses `flex flex-col flex-grow min-h-0 overflow-hidden` for proper nested scrolling. `LibraryView.tsx` uses `flex` for its two-pane layout, with the sidebar width controlled by state and the main content area managing its own scrolling. Tailwind CSS used throughout.
-    *   `AssetCard.tsx`: Displays thumbnail, key metadata, a version count badge (top-right), and a shares/accumulated shares label. The version badge shows the total count of assets in the group. The shares label is always "Shares:", but the value shown is conditional (accumulated vs. master shares) based on the version count, clarified by the native `title` attribute. Includes history button in footer.
-    *   `AssetListRow.tsx`: Renders table cells (`<td>`) matching the columns defined in `AssetList.tsx`'s header.
-*   **Error Handling**: Basic error handling in IPC/hooks. `bulk-import-assets`/`bulkUpdateAssets` return errors. Thumbnail errors logged.
-*   **Dependencies**: `electron`, `react`, `better-sqlite3`, `@electron-toolkit/utils`, `mime-types`, `react-icons`, `ffmpeg-static`, `react-tooltip`, `react-modal` (required for VersionHistoryModal). External tools (`ffmpeg`, `pdftocairo`, `magick` CLI (ImageMagick), `Ghostscript`) needed for PDF and video thumbnails.
-*   **Type Definitions**: `app/index.d.ts` defines the `ElectronAPI` interface exposed via preload, including specific handlers and a generic `invoke` method.
-*   **Tooltips (AssetCard)**: The `react-tooltip` component was previously used for hover details on the version count badge and shares value within the `AssetCard`. However, due to unresolved CSS layout conflicts causing visual glitches (e.g., unexpected boxes/slashes), this was removed. The standard HTML `title` attribute is now used as a fallback for providing this information on hover.
+*   **Asset Creation/Import**: Handled by `createAsset`/`bulkImportAssets` IPCs. Creates master assets.
+*   **Asset Update**: Single (`update-asset`) or batch (`bulkUpdateAssets` hook calling `update-asset` multiple times).
+*   **Asset Deletion**: Single (`deleteAsset`) or batch (via `LibraryView` calling `deleteAsset` multiple times). Deleting master does not delete versions.
+*   **Filtering & Sorting**: State managed in `LibraryView.tsx`. Filters passed to `SidebarFilters.tsx`. `fetchAssets` hook passes filters/sort to `get-assets` IPC handler which builds SQL (`WHERE a.master_id IS NULL`, `LEFT JOIN` for aggregates). Filtering/sorting applies to the list of master assets.
+*   **File Storage**: `/vault/` directory. DB stores relative paths.
+*   **Previews/Thumbnails**: `ThumbnailService.ts`. Path returned by `get-assets`.
+*   **Database**: `better-sqlite3`. Schema in `main/schema.ts`.
+*   **Path Handling**: Uses `path.win32` for DB paths if needed, `path` otherwise.
+*   **UI Layout**: Tailwind CSS. `App.tsx` uses Flexbox for root layout. `LibraryView.tsx` uses Flexbox for sidebar/main panes. `SidebarFilters.tsx` manages its internal scrolling and layout.
+*   **Error Handling**: Basic handling in hooks/IPCs. Batch operations return error details.
+*   **Dependencies**: `electron`, `react`, `better-sqlite3`, `react-icons`, `react-tooltip`, `react-modal`, etc. External tools for some thumbnails.
+*   **Type Definitions**: `app/index.d.ts` defines `ElectronAPI`. `useAssets.ts` defines core data types.
+*   **Tooltips**: Previously used `react-tooltip` in `AssetCard` but removed due to layout issues; now uses native `title` attribute. Other components like `VersionHistoryModal` still use `react-tooltip`. 
