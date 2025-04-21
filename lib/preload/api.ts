@@ -28,6 +28,7 @@ const api = {
   getVersions: (payload: { masterId: number }) => ipcRenderer.invoke('get-versions', payload),
   addToGroup: (payload: { versionId: number; masterId: number }) => ipcRenderer.invoke('add-to-group', payload),
   removeFromGroup: (payload: { versionId: number }) => ipcRenderer.invoke('remove-from-group', payload),
+  promoteVersion: (payload: { versionId: number }) => ipcRenderer.invoke('promote-version', payload),
 }
 
 export default api

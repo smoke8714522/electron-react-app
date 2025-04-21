@@ -9,7 +9,7 @@ import {
 } from 'react-icons/fi';
 // Import the new modal component and types
 import BulkEditModal, { BulkUpdatePayload } from './BulkEditModal';
-import VersionHistoryModal from './VersionHistoryModal'; // Import the VersionHistoryModal
+import { VersionHistoryModal } from './VersionHistoryModal'; // Import the VersionHistoryModal
 import { Tooltip } from 'react-tooltip'; // Import Tooltip
 
 // PRD §4.1 Library View: Define props for LibraryView including fetchAssets with params
@@ -18,16 +18,9 @@ interface LibraryViewProps {
     loading: boolean;
     error: string | null;
     bulkImportAssets: () => Promise<BulkImportResult>;
-    // PRD §4.1 Library View: fetchAssets signature updated to accept filters/sort
     fetchAssets: (filters?: FetchFilters, sort?: FetchSort) => Promise<void>; 
     deleteAsset: (id: number) => Promise<boolean>;
-    updateAsset: (payload: UpdateAssetPayload) => Promise<boolean>; 
     bulkUpdateAssets: (selectedIds: number[], updates: BulkUpdatePayload) => Promise<BatchUpdateResult>;
-    // Add versioning functions from useAssets hook to props
-    getVersions: (masterId: number) => Promise<GetVersionsResult>;
-    createVersion: (masterId: number, sourcePath: string) => Promise<CreateVersionResult>;
-    addToGroup: (versionId: number, masterId: number) => Promise<AddToGroupResult>;
-    removeFromGroup: (versionId: number) => Promise<RemoveFromGroupResult>;
 }
 
 // PRD §4.1 Library View: Define the main library view component
@@ -38,12 +31,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({
     bulkImportAssets, 
     fetchAssets,
     deleteAsset,
-    updateAsset,
     bulkUpdateAssets,
-    getVersions,
-    createVersion,
-    addToGroup,
-    removeFromGroup
 }) => {
     // PRD §4.1 Library View: Use props instead of hook
     // const { assets, loading, error, bulkImportAssets, fetchAssets } = useAssets(); // Remove this line
@@ -534,7 +522,12 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                                                 {/* Consistent thumbnail rendering */} 
                                                 <div className="w-16 h-10 bg-gray-700 rounded flex items-center justify-center overflow-hidden">
                                                     {asset.thumbnailPath ? (
-                                                        <img src={asset.thumbnailPath + `?${Date.now()}`} alt="Thumbnail" className="object-cover h-full w-full" loading="lazy"/>
+                                                        <img 
+                                                            src={asset.thumbnailPath + `?${Date.now()}`} // Append timestamp to try and bypass cache if needed
+                                                            alt="Thumbnail" 
+                                                            className="object-cover h-full w-full transition-transform duration-300 group-hover:scale-105" 
+                                                            loading="lazy"
+                                                        />
                                                     ) : (
                                                         <FiEye className="text-gray-500" size={20} />
                                                     )}
@@ -591,26 +584,19 @@ const LibraryView: React.FC<LibraryViewProps> = ({
 
             {/* Tooltip for Asset Card items */}
             <Tooltip id="asset-card-tooltip" place="top" />
+
+            {/* Tooltip component definitions */}
+            <Tooltip id="accumulated-shares-tooltip" place="top" />
         </div>
     );
 };
-
-// Utility function (can be moved to a utils file)
-const formatBytes = (bytes: number, decimals = 1): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-}
 
 // --- Asset Card Component (used in Grid View) --- 
 interface AssetCardProps {
     asset: AssetWithThumbnail;
     isSelected: boolean;
     onSelect: (assetId: number, isSelected: boolean) => void;
-    onHistory: (masterId: number) => void; // <-- Add history callback prop
+    onHistory: (masterId: number) => void; // <-- Prop for history action
 }
 
 // PRD §4.1 Library View: Asset card component
@@ -653,7 +639,8 @@ const AssetCard: React.FC<AssetCardProps> = ({ asset, isSelected, onSelect, onHi
                 {displayAccumulatedShares && (
                     <span 
                         className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-600 text-purple-100 shadow"
-                        title={`Accumulated Shares: ${asset.accumulatedShares?.toLocaleString()}`}
+                        data-tooltip-id="asset-card-tooltip"
+                        data-tooltip-content={`Accumulated Shares: ${asset.accumulatedShares?.toLocaleString()}`}
                     >
                         <FiShare2 className="mr-1" size={12}/> 
                         {asset.accumulatedShares?.toLocaleString()}
@@ -662,7 +649,8 @@ const AssetCard: React.FC<AssetCardProps> = ({ asset, isSelected, onSelect, onHi
                  {displayVersionBadge && (
                     <span 
                         className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-600 text-teal-100 shadow"
-                        title={`Version: ${asset.version_no}`}
+                        data-tooltip-id="asset-card-tooltip"
+                        data-tooltip-content={`Version: ${asset.version_no}`}
                     >
                         <FiGitBranch className="mr-1" size={12}/> v{asset.version_no}
                     </span>
@@ -679,7 +667,7 @@ const AssetCard: React.FC<AssetCardProps> = ({ asset, isSelected, onSelect, onHi
                         loading="lazy"
                     />
                 ) : (
-                    <FiEye className="text-gray-500 text-4xl" />
+                    <FiEye className="text-gray-500" size={20} />
                 )}
                 {/* Optional: Overlay on hover? */}
             </div>
@@ -700,49 +688,16 @@ const AssetCard: React.FC<AssetCardProps> = ({ asset, isSelected, onSelect, onHi
                 </div>
             </div>
 
-             {/* Footer Actions - Visible on hover/selected? (Or always visible) */} 
-            <div className="px-3 pb-2 pt-1 bg-gray-800 border-t border-gray-700 flex justify-end items-center space-x-2">
-                <button 
+             {/* Footer - Absolute positioning at the bottom right for icons */}
+            <div className="absolute bottom-2 right-2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-10">
+                 {/* History Button */}
+                 <button
                     onClick={handleHistoryClick}
-                    className="p-1 text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded transition-colors duration-150"
-                    title="View History"
+                    className="p-1 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 hover:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
-                    <FiClock size={16} />
+                    <FiClock size={14} />
                 </button>
-                {/* Add other actions like quick view, edit later? */}
-            </div>
-
-            {/* Versioning Badges/Button */} 
-            <div className="flex items-center justify-end space-x-2 mt-1 absolute bottom-2 right-2">
-                {/* Accumulated Shares Badge (if different) */}
-                {asset.accumulatedShares !== undefined && asset.accumulatedShares !== null && asset.accumulatedShares !== asset.shares && (
-                     <span 
-                         className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-900 text-blue-300"
-                         data-tooltip-id="asset-card-tooltip"
-                         data-tooltip-content={`Total shares including versions: ${asset.accumulatedShares.toLocaleString()}`}
-                     >
-                          <FiShare2 size={12} className="mr-0.5"/> {asset.accumulatedShares.toLocaleString()}
-                     </span>
-                )}
-                 {/* Version Number Badge (if > 1) */}
-                 {(asset.version_no ?? 1) > 1 && (
-                     <span 
-                         className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-700 text-gray-300"
-                          data-tooltip-id="asset-card-tooltip"
-                          data-tooltip-content={`This asset is version ${asset.version_no}`}
-                      >
-                          v{asset.version_no}
-                     </span>
-                 )}
-                  {/* History Button */} 
-                 <button 
-                      onClick={handleHistoryClick} 
-                      className="p-1 rounded text-gray-400 hover:text-blue-400 hover:bg-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      data-tooltip-id="asset-card-tooltip"
-                      data-tooltip-content="View Version History"
-                  >
-                      <FiClock size={14} />
-                 </button>
+                {/* Add other action buttons here if needed */}
             </div>
         </div>
     );

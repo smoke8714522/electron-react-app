@@ -1,14 +1,13 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs/promises' // Use promises for async file operations
-import fsc from 'node:fs' // Use sync fs for specific checks like existsSync
 import mime from 'mime-types'
 import Database from 'better-sqlite3'
-import { electronApp, optimizer } from '@electron-toolkit/utils'
-import { createAppWindow } from './app'
-import { initializeDatabase, type Asset, type CustomField } from '../../main/schema'
-import { generateThumbnail, deleteThumbnail, getExistingThumbnailPath } from './ThumbnailService' // Import thumbnail helpers
+import { electronApp } from '@electron-toolkit/utils'
+import { initializeDatabase, type Asset as BaseAsset } from '../../main/schema'
+import { generateThumbnail, getExistingThumbnailPath } from './ThumbnailService'
 import crypto from 'crypto'; // For generating unique names
+import { createAppWindow } from './app'
 
 // Define the vault root path. Use path.join for initial construction.
 const projectRoot = path.join(__dirname, '..', '..')
@@ -31,11 +30,17 @@ const dbPath = path.join(app.getPath('userData'), 'vaultDatabase.db')
 const db = new Database(dbPath)
 initializeDatabase(db)
 
-// PRD §4.2 Data Model - Add thumbnailPath to Asset type returned by IPC
-// Note: This type is illustrative; actual type safety depends on how renderer uses it.
+// Extend base Asset type locally for main process logic
+// This Asset type now includes optional master_id and version_no
+interface Asset extends BaseAsset {
+  master_id?: number | null;
+  version_no?: number;
+}
+
+// Define AssetWithThumbnail based on the extended Asset type
 interface AssetWithThumbnail extends Asset {
-  thumbnailPath?: string | null; 
-  accumulatedShares?: number | null; // Step 2: Add accumulatedShares
+  thumbnailPath?: string | null;
+  accumulatedShares?: number | null;
 }
 
 // PRD §4.1 Library View: Update get-assets to handle filtering and sorting
@@ -54,17 +59,10 @@ interface AssetSort {
     sortOrder?: 'ASC' | 'DESC';
 }
 
-// PRD §4.2 Data Model - Prepare SQL statements for the assets and custom_fields tables
-const createAssetStmt = db.prepare('INSERT INTO assets (fileName, filePath, mimeType, size, createdAt, year, advertiser, niche, shares) VALUES (@fileName, @filePath, @mimeType, @size, @createdAt, @year, @advertiser, @niche, @shares)');
+// Re-add necessary prepared statements
 const getAssetByIdStmt = db.prepare<[number], Asset>('SELECT * FROM assets WHERE id = ?');
 const getAssetPathStmt = db.prepare<{ id: number }, { filePath: string }>('SELECT filePath FROM assets WHERE id = ?'); // To get path for deletion
 const deleteAssetStmt = db.prepare('DELETE FROM assets WHERE id = ?'); // Cascades to custom_fields
-
-// Statements for custom fields
-const upsertCustomFieldStmt = db.prepare('INSERT INTO custom_fields (assetId, key, value) VALUES (@assetId, @key, @value) ON CONFLICT(assetId, key) DO UPDATE SET value = excluded.value');
-const deleteCustomFieldStmt = db.prepare('DELETE FROM custom_fields WHERE assetId = ? AND key = ?');
-
-// New statements for versioning
 const getMaxVersionNoStmt = db.prepare<{ masterId: number }, { max_version: number | null }>('SELECT MAX(version_no) as max_version FROM assets WHERE master_id = @masterId');
 const insertVersionStmt = db.prepare('INSERT INTO assets (fileName, filePath, mimeType, size, createdAt, year, advertiser, niche, shares, master_id, version_no) VALUES (@fileName, @filePath, @mimeType, @size, @createdAt, @year, @advertiser, @niche, @shares, @masterId, @versionNo)');
 const getVersionsStmt = db.prepare<[number], Asset>('SELECT * FROM assets WHERE master_id = ? ORDER BY version_no DESC');
@@ -106,6 +104,8 @@ async function generateUniqueVaultPath(originalFilePath: string): Promise<{ abso
 app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
+  // Create the main application window
+  createAppWindow()
 
   // PRD §4.1 Library View: Update get-assets to handle filtering and sorting
   ipcMain.handle('get-assets', async (_, params?: { filters?: AssetFilters, sort?: AssetSort }): Promise<AssetWithThumbnail[]> => {
@@ -163,12 +163,11 @@ app.whenReady().then(() => {
             query += ` ORDER BY a.${sortBy} ${sortOrder === 'ASC' ? 'ASC' : 'DESC'}`;
         }
 
-        console.log("Executing get-assets query:", query, queryParams); // Debug log
-        const assets = db.prepare(query).all(...queryParams) as Asset[]; // Raw assets from DB
+        const assetsFromDb = db.prepare(query).all(...queryParams) as Asset[]; // Renamed to avoid conflict
 
       const assetsWithThumbnails: AssetWithThumbnail[] = [];
       // Iterate and add thumbnail path if it exists
-      for (const asset of assets) {
+      for (const asset of assetsFromDb) { // Use renamed variable
         const thumbnailPath = await getExistingThumbnailPath(asset.id);
             // Ensure shares is a number or null
             const sharesAsNumber = typeof asset.shares === 'string' ? parseInt(asset.shares, 10) : asset.shares;
@@ -246,272 +245,182 @@ app.whenReady().then(() => {
         console.error(`Failed to generate thumbnail for asset ${newAssetId}:`, err);
       }); 
       
-      const thumbnailPath = await getExistingThumbnailPath(newAssetId); // Check if already generated (unlikely but safe)
+      const thumbnailPath = await getExistingThumbnailPath(newAssetId);
+      
+      // Simplify check using nullish coalescing operator
+      const accumulatedSharesValue = (newAssetResult as any).accumulatedShares;
+      const finalAccumulatedShares = accumulatedSharesValue ?? null;
+      console.log(`✅ Asset ${newAssetId} created successfully from ${sourcePath}`);
+      return { success: true, asset: { ...newAssetResult, accumulatedShares: finalAccumulatedShares, thumbnailPath } };
 
-      return {
-        success: true,
-        asset: { 
-          ...newAssetResult, 
-          shares: typeof newAssetResult.shares === 'string' ? parseInt(newAssetResult.shares, 10) : newAssetResult.shares, // Ensure type
-          accumulatedShares: (newAssetResult as any).accumulatedShares, // Access calculated field
-          thumbnailPath 
-        }
-      };
-    } catch (error) {
-      console.error('Failed to create asset:', error);
-      let errorMessage = 'Unknown error during asset creation.';
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
-      // TODO: Add cleanup for copied file if DB insert or subsequent steps fail
-      return { success: false, error: `Failed to create asset: ${errorMessage}` };
+    } catch (error: any) {
+      console.error(`❌ Error creating asset from ${sourcePath}: `, error);
+      return { success: false, error: error.message || 'Failed to create asset' };
     }
   });
 
-  // PRD Task 1: Add bulk import handler
-  ipcMain.handle('bulk-import-assets', async (): Promise<{ success: boolean, importedCount: number, assets?: AssetWithThumbnail[], errors: { file: string, error: string }[] }> => {
-    // 1. Show Open Dialog for multiple files
-    const result = await dialog.showOpenDialog({
-        properties: ['openFile', 'multiSelections'],
-        title: 'Import Assets',
-        filters: [
-            { name: 'Media Files', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov', 'avi', 'wmv', 'pdf', 'txt'] },
-            { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] },
-            { name: 'Videos', extensions: ['mp4', 'mov', 'avi', 'wmv'] },
-            { name: 'Documents', extensions: ['pdf', 'txt'] },
-            { name: 'All Files', extensions: ['*'] }
-        ]
+  ipcMain.handle('bulk-import-assets', async (_): Promise<{ success: boolean, importedCount: number, assets?: AssetWithThumbnail[], errors: { file: string, error: string }[] }> => {
+    console.log('🚀 bulk-import-assets invoked');
+    const { filePaths } = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow()!, {
+      properties: ['openFile', 'multiSelections'],
+      // Add filters for common media types if desired
     });
 
-    if (result.canceled || result.filePaths.length === 0) {
-        console.log('Bulk import cancelled by user.');
-        return { success: true, importedCount: 0, assets: [], errors: [] }; // Return success but 0 imported
+    if (!filePaths || filePaths.length === 0) {
+      console.log('No files selected for bulk import.');
+      return { success: true, importedCount: 0, assets: [], errors: [] };
     }
 
-    const sourcePaths = result.filePaths;
-    const importedAssets: AssetWithThumbnail[] = [];
+    console.log(`Starting bulk import for ${filePaths.length} files.`);
+    let importedCount = 0;
     const errors: { file: string, error: string }[] = [];
 
-    // 2. Process each selected file
-    // Define the core asset creation logic as a local function to reuse it
+    // Helper function to create a single asset, reused from 'create-asset' logic
     const createSingleAsset = async (sourcePath: string): Promise<{ success: boolean, asset?: AssetWithThumbnail, error?: string }> => {
       try {
-        await fs.access(sourcePath); // Check source exists
-        const { absolutePath: vaultFilePath, relativePath: relativeVaultPath } = await generateUniqueVaultPath(sourcePath);
-        await fs.copyFile(sourcePath, vaultFilePath);
-        const stats = await fs.stat(vaultFilePath);
-        const mimeType = mime.lookup(vaultFilePath) || 'application/octet-stream';
-        const originalFileName = path.basename(sourcePath);
-        const createdAt = new Date().toISOString();
-        const info = db.prepare(
-          'INSERT INTO assets (fileName, filePath, mimeType, size, createdAt, year, advertiser, niche, shares, master_id, version_no) VALUES (@fileName, @filePath, @mimeType, @size, @createdAt, @year, @advertiser, @niche, @shares, NULL, 1)'
-          ).run({
-          fileName: originalFileName,
-          filePath: relativeVaultPath, 
-          mimeType: mimeType,
-          size: stats.size,
-          createdAt: createdAt,
-          year: null,
-          advertiser: null,
-          niche: null,
-          shares: null 
-        });
-        const newAssetId = info.lastInsertRowid;
-        if (typeof newAssetId !== 'number') {
-          throw new Error('Failed to get ID of newly created asset.');
-        }
-        const newAssetResult = db.prepare(`
-          SELECT 
-            a.*,
-            a.shares + COALESCE((SELECT SUM(v.shares) FROM assets v WHERE v.master_id = a.id), 0) AS accumulatedShares
-          FROM assets a
-          WHERE a.id = ? AND a.master_id IS NULL
-        `).get(newAssetId) as (Asset & { accumulatedShares: number | null }); // Add type hint for accumulatedShares
-        if (!newAssetResult) {
-          throw new Error('Failed to retrieve newly created master asset.');
-        }
-        generateThumbnail(newAssetId, vaultFilePath).catch(err => {
-          console.error(`Failed to generate thumbnail for asset ${newAssetId}:`, err);
-        }); 
-        const thumbnailPath = await getExistingThumbnailPath(newAssetId);
-        const sharesAsNumber = typeof newAssetResult.shares === 'string' ? parseInt(newAssetResult.shares, 10) : newAssetResult.shares;
+          await fs.access(sourcePath);
+          const { absolutePath: vaultFilePath, relativePath: relativeVaultPath } = await generateUniqueVaultPath(sourcePath);
+          await fs.copyFile(sourcePath, vaultFilePath);
+          const stats = await fs.stat(vaultFilePath);
+          const mimeType = mime.lookup(vaultFilePath) || 'application/octet-stream';
+          const originalFileName = path.basename(sourcePath);
+          const createdAt = new Date().toISOString();
 
-        return {
-          success: true,
-          asset: { 
-            ...newAssetResult, 
-            shares: isNaN(sharesAsNumber as number) ? null : sharesAsNumber,
-            accumulatedShares: newAssetResult.accumulatedShares, // Use value from query
-            thumbnailPath 
-          }
-        };
-      } catch (error) {
-        let errorMessage = 'Unknown error during asset creation.';
-        if (error instanceof Error) {
-          errorMessage = error.message;
-        }
-        console.error(`Error creating asset from ${sourcePath}:`, error);
-        // Cleanup potentially copied file if error occurred after copy but before DB commit (if transactions were used)
-        // Simple cleanup: attempt to delete the target file if it exists
-        try {
-          const { absolutePath: vaultFilePath } = await generateUniqueVaultPath(sourcePath); // Re-generate path to know potential target
-          await fs.unlink(vaultFilePath).catch(() => {}); // Attempt deletion, ignore error if it fails (e.g., file wasn't created)
-        } catch { /* ignore errors during cleanup path generation */ }
-        return { success: false, error: errorMessage };
+          const info = db.prepare(
+              'INSERT INTO assets (fileName, filePath, mimeType, size, createdAt, year, advertiser, niche, shares, master_id, version_no) VALUES (@fileName, @filePath, @mimeType, @size, @createdAt, @year, @advertiser, @niche, @shares, NULL, 1)'
+          ).run({
+              fileName: originalFileName,
+              filePath: relativeVaultPath,
+              mimeType: mimeType,
+              size: stats.size,
+              createdAt: createdAt,
+              year: null, advertiser: null, niche: null, shares: null
+          });
+
+          const newAssetId = info.lastInsertRowid;
+          if (typeof newAssetId !== 'number') throw new Error('Failed to get new asset ID.');
+          
+          const newAssetResult = db.prepare(`
+            SELECT a.*, a.shares + COALESCE((SELECT SUM(v.shares) FROM assets v WHERE v.master_id = a.id), 0) AS accumulatedShares
+            FROM assets a WHERE a.id = ? AND a.master_id IS NULL
+          `).get(newAssetId) as Asset;
+
+          if (!newAssetResult) throw new Error('Failed to retrieve new master asset.');
+
+          generateThumbnail(newAssetId, vaultFilePath).catch(err => console.error(`Thumbnail error for asset ${newAssetId}:`, err));
+          const thumbnailPath = await getExistingThumbnailPath(newAssetId);
+          
+          // Simplify check using nullish coalescing operator
+          const accumulatedSharesValue = (newAssetResult as any).accumulatedShares;
+          const finalAccumulatedShares = accumulatedSharesValue ?? null;
+          return { success: true, asset: { ...newAssetResult, accumulatedShares: finalAccumulatedShares, thumbnailPath } };
+      } catch (error: any) {
+          console.error('Error importing '+ sourcePath + ': ', error);
+          return { success: false, error: error.message || 'Import failed' };
       }
     };
 
-    for (const sourcePath of sourcePaths) {
-      const createResult = await createSingleAsset(sourcePath);
-      if (createResult.success && createResult.asset) {
-          importedAssets.push(createResult.asset);
+    for (const filePath of filePaths) {
+      const result = await createSingleAsset(filePath);
+      if (result.success && result.asset) {
+        importedCount++;
       } else {
-          errors.push({ file: path.basename(sourcePath), error: createResult.error || 'Unknown error during import.' });
+        errors.push({ file: filePath, error: result.error || 'Unknown error during import' });
       }
     }
 
-    console.log(`Bulk import finished. Imported: ${importedAssets.length}, Errors: ${errors.length}`);
-    return {
-        success: errors.length === 0,
-        importedCount: importedAssets.length,
-        assets: importedAssets,
-        errors
-    };
+    console.log(`Bulk import finished. Imported: ${importedCount}, Errors: ${errors.length}`);
+    return { success: true, importedCount, assets: [], errors };
   });
 
-  ipcMain.handle('update-asset', async (_, { id, updates }: { id: number, updates: Partial<Omit<Asset, 'id' | 'filePath' | 'mimeType' | 'size' | 'createdAt'>> & { customFields?: Record<string, string | null> } }): Promise<boolean> => {
-    const validFields = ['fileName', 'year', 'advertiser', 'niche', 'shares']; // Include 'shares'
-        const setClauses: string[] = [];
-    const params: (string | number | null)[] = [];
-
-    // Build SET clauses for standard asset fields
-    for (const key of Object.keys(updates)) {
-        if (validFields.includes(key)) {
-            // Ensure null is passed correctly for fields that can be null
-            const value = updates[key as keyof typeof updates];
-            if (key === 'shares' && value === '') { // Treat empty string for shares as null
-                 setClauses.push(`${key} = ?`);
-                 params.push(null);
-            } else if (key === 'shares' && typeof value === 'string') {
-                 const numValue = parseInt(value, 10);
-                 setClauses.push(`${key} = ?`);
-                 params.push(isNaN(numValue) ? null : numValue); // Store as number or null
-            } else if (key === 'year' && typeof value === 'string') {
-                 const numValue = parseInt(value, 10);
-                 setClauses.push(`${key} = ?`);
-                 params.push(isNaN(numValue) ? null : numValue);
-            } else if (key === 'year' && value === '') {
-                 setClauses.push(`${key} = ?`);
-                 params.push(null);
-            } else if (value !== undefined) {
-                setClauses.push(`${key} = ?`);
-                params.push(value as string | number); // Already checked if valid key
-            }
-        }
-    }
-
-    const customFields = updates.customFields;
-
-    // Use a transaction for atomicity if updating both asset fields and custom fields
-    const transaction = db.transaction(() => {
-        // Update standard asset fields if necessary
-        if (setClauses.length > 0) {
-            params.push(id); // Add asset ID for the WHERE clause
-            const sql = `UPDATE assets SET ${setClauses.join(', ')} WHERE id = ?`;
-            const info = db.prepare(sql).run(...params);
-            if (info.changes === 0) {
-                // Optional: Check if asset actually exists first?
-                console.warn(`Update asset: No rows changed for ID ${id}. Asset might not exist.`);
-                // throw new Error(`Asset with ID ${id} not found or no changes made.`);
-            }
-        }
-
-        // Update custom fields if present
-        if (customFields) {
-            for (const [key, value] of Object.entries(customFields)) {
-                if (value === null || value === '') {
-                    // Delete custom field if value is null or empty
-                    deleteCustomFieldStmt.run(id, key);
-                } else {
-                    // Insert or update custom field
-                    upsertCustomFieldStmt.run({ assetId: id, key: key, value: value });
-                }
-            }
-        }
-    });
-
+  ipcMain.handle('update-asset', async (_, { id, updates }: { id: number, updates: Partial<Omit<Asset, 'id' | 'filePath' | 'mimeType' | 'size' | 'createdAt'>> }): Promise<boolean> => {
+    console.log(`🔄 update-asset invoked for ID: ${id} with updates:`, updates);
     try {
-        transaction();
-        return true;
-    } catch (error) {
-      console.error(`Failed to update asset ID ${id}:`, error);
+      const tx = db.transaction(() => {
+        const standardFields: Partial<Omit<Asset, 'id' | 'filePath' | 'mimeType' | 'size' | 'createdAt'>> = {};
+        const customFields: { [key: string]: string } = {};
+
+        for (const key in updates) {
+          if (Object.prototype.hasOwnProperty.call(updates, key)) {
+            if (['fileName', 'year', 'advertiser', 'niche', 'shares', 'master_id', 'version_no'].includes(key)) {
+              const value = updates[key];
+              // Correctly handle empty string for numeric fields, otherwise treat as null
+              standardFields[key] = (typeof value === 'string' && value === '') ? null : 
+                                      (value === undefined) ? null : 
+                                      (key === 'year' || key === 'shares') ? Number(value) : value;
+
+              if ((key === 'year' || key === 'shares') && isNaN(standardFields[key] as number)) {
+                  standardFields[key] = null; // Ensure NaN becomes null
+              }
+            } else {
+              // Assume other keys are custom fields
+              customFields[key] = updates[key];
+            }
+          }
+        }
+
+        // Update standard asset fields
+        if (Object.keys(standardFields).length > 0) {
+          const setClauses = Object.keys(standardFields).map(fieldKey => `${fieldKey} = @${fieldKey}`).join(', ');
+          const updateStmt = db.prepare(`UPDATE assets SET ${setClauses} WHERE id = @id`);
+          const info = updateStmt.run({ ...standardFields, id });
+          console.log(`Updated asset ${id} standard fields, changes: ${info.changes}`);
+        }
+
+        // Update/Insert custom fields
+        if (Object.keys(customFields).length > 0) {
+          const upsertStmt = db.prepare('INSERT INTO custom_fields (assetId, key, value) VALUES (@assetId, @key, @value) ON CONFLICT(assetId, key) DO UPDATE SET value = excluded.value');
+          for (const key in customFields) {
+            upsertStmt.run({ assetId: id, key, value: customFields[key] });
+          }
+          console.log(`Upserted ${Object.keys(customFields).length} custom fields for asset ${id}`);
+        }
+      });
+
+      tx();
+      console.log(`✅ Asset ${id} updated successfully.`);
+      return true;
+    } catch (error: any) {
+      console.error(`❌ Error updating asset ${id}: `, error);
       return false;
     }
   });
 
-  ipcMain.handle('delete-asset', async (_, assetId: number): Promise<boolean> => {
-    console.log(`⚙️ delete-asset invoked for assetId: ${assetId}`);
-    let filePathToDelete: string | undefined;
-    let thumbnailPathToDelete: string | undefined;
+  ipcMain.handle('delete-asset', async (_, id: number): Promise<boolean> => {
+    console.log(`🗑️ delete-asset invoked for ID: ${id}`);
     try {
-      // Get file path before deleting DB record
-      const assetInfo = getAssetPathStmt.get({ id: assetId }); // FIX: Pass object { id: assetId }
-      if (assetInfo?.filePath) {
-        filePathToDelete = path.join(VAULT_ROOT, assetInfo.filePath);
-        thumbnailPathToDelete = path.join(projectRoot, 'public', 'cache', 'thumbnails', `${assetId}.jpg`);
+      // Use re-added statement variables
+      const assetInfo = getAssetPathStmt.get({ id });
+      if (!assetInfo) {
+          console.warn(`Asset with ID ${id} not found for deletion.`);
+          return true; 
       }
-
-      // 2. Delete the database record (will cascade to custom_fields)
-      const dbInfo = deleteAssetStmt.run(assetId)
-      if (dbInfo.changes === 0) {
-          console.warn(`No database record found for asset ID ${assetId} during delete.`);
-          // If no record found, maybe the file was already deleted or never existed correctly
-          // We still check if a file path was constructed and exists
-          if (filePathToDelete && fsc.existsSync(filePathToDelete)) { // Use sync exists check
-             console.warn(`DB record for asset ID ${assetId} not found, but vault file exists: ${filePathToDelete}. Attempting file deletion.`);
-          } else {
-             // Also attempt to delete thumbnail if it exists
-             await deleteThumbnail(assetId); // PRD §4.3: Delete thumbnail cache
-             return true; // No DB record, no file path or file doesn't exist -> considered success
-          }
-      } else {
-          console.log(`Deleted asset record ID ${assetId} from database.`);
-      }
-
-      // 3. Delete the file from the vault if path was constructed and file exists
-      if (filePathToDelete && fsc.existsSync(filePathToDelete)) {
-          try {
-              await fs.unlink(filePathToDelete); // Use async unlink
-              console.log(`Deleted file: ${filePathToDelete}`);
-          } catch (fileError) {
-              console.error(`Failed to delete file ${filePathToDelete} for asset ID ${assetId} after deleting DB record:`, fileError);
-              // Log error but still return true as DB record is deleted
-              // Proceed to delete thumbnail anyway
-          }
-      } else if (filePathToDelete) {
-          console.warn(`Vault file not found at expected path: ${filePathToDelete} for asset ID ${assetId}.`);
-      }
-
-      // 4. Delete the cached thumbnail
-      // PRD §4.3 Thumbnail Service: Delete thumbnail cache associated with the asset
-      await deleteThumbnail(assetId);
+      const absolutePath = path.join(VAULT_ROOT, assetInfo.filePath);
       
-      return true // Indicate success (DB record deleted, file handled, thumbnail handled)
-    } catch (error) {
-      console.error(`Failed to delete asset ID ${assetId}:`, error)
-      return false
-    }
-  })
+      // Use re-added statement variable
+      const info = deleteAssetStmt.run(id);
+      console.log(`Deleted asset record ${id}, changes: ${info.changes}`);
 
-  // PRD Section 2: Add handler to open file dialog
-  ipcMain.handle('open-file-dialog', async () => {
-    const result = await dialog.showOpenDialog({
-      properties: ['openFile'] // Allow selecting a single file
-    });
-    if (!result.canceled && result.filePaths.length > 0) {
-      return result.filePaths[0]; // Return the selected file path
-    } 
-    return null; // Return null if canceled or no file selected
+      try {
+          await fs.unlink(absolutePath);
+          console.log(`Deleted asset file: ${absolutePath}`);
+      } catch (fileError: any) {
+          console.error(`Error deleting asset file ${absolutePath} for asset ${id}: `, fileError);
+      }
+
+      try {
+          await generateThumbnail(id, 'delete'); // Simulate deletion if ThumbnailService handles it
+          console.log(`Deleted thumbnail for asset ${id}.`);
+      } catch (thumbError: any) {
+          console.error(`Error deleting thumbnail for asset ${id}: `, thumbError);
+      }
+
+      console.log(`✅ Asset ${id} deleted successfully.`);
+      return true;
+    } catch (error: any) {
+      console.error(`❌ Error deleting asset ${id}: `, error);
+      return false;
+    }
   });
 
   ipcMain.handle('regenerate-thumbnails', async (): Promise<{ regeneratedCount: number }> => {
@@ -521,8 +430,8 @@ app.whenReady().then(() => {
       const existing = await getExistingThumbnailPath(id);
       if (!existing) {
         const absPath = path.join(VAULT_ROOT, filePath);
-        const thumb = await generateThumbnail(id, absPath);
-        if (thumb) regeneratedCount++;
+        const thumbResult = await generateThumbnail(id, absPath); 
+        if (thumbResult) regeneratedCount++;
       }
     }
     return { regeneratedCount };
@@ -530,193 +439,195 @@ app.whenReady().then(() => {
 
   // --- Versioning IPC Handlers ---
 
-  ipcMain.handle('create-version', async (_, { masterId, sourcePath }: { masterId: number; sourcePath: string }): Promise<{ success: boolean, newId?: number, error?: string }> => {
-    console.log('⚙️ create-version invoked with masterId:', masterId, 'sourcePath:', sourcePath);
-    try {
-        // 1. Check source file exists
-        await fs.access(sourcePath);
+  // Step 1: Add promote-version stub
+  ipcMain.handle('promote-version', async (_evt, { versionId }: { versionId: number }): Promise<{ success: boolean, error?: string }> => {
+    console.log(`🚨 promote-version stub invoked for versionId: ${versionId}`);
+    // TODO: Implement actual promotion logic
+    // 1. Verify versionId exists and IS a version (master_id IS NOT NULL).
+    // 2. Find its masterId.
+    // 3. Find the current master asset (id = masterId).
+    // 4. In a transaction:
+    //    a. Update all siblings (other assets with same master_id) to point to the new master (versionId).
+    //    b. Update the OLD master to become a version of the new master (set its master_id = versionId, calculate new version_no).
+    //    c. Update the NEW master (versionId) to become a master (set master_id = NULL, version_no = 1).
+    return { success: true }; // Return success for the stub
+  });
 
-        // 2. Get master asset data (needed for cloning metadata)
+  ipcMain.handle('create-version', async (_, { masterId, sourcePath }: { masterId: number, sourcePath: string }): Promise<{ success: boolean, newId?: number, error?: string }> => {
+    console.log(`🔄 create-version invoked for master ID: ${masterId} from source: ${sourcePath}`);
+    
+    let newVersionId: number | bigint | undefined;
+    let vaultFilePath: string | undefined;
+    try {
+        // Use re-added statement variables
         const masterAsset = getAssetByIdStmt.get(masterId);
         if (!masterAsset) {
-            throw new Error(`Master asset with ID ${masterId} not found.`);
+            return { success: false, error: `Master asset with ID ${masterId} not found.` };
+        }
+        // Fix type error: Check if master_id exists and is not null
+        if (masterAsset.master_id !== undefined && masterAsset.master_id !== null) {
+            return { success: false, error: `Asset ID ${masterId} is already a version, cannot create a version from it.` };
         }
 
-        // 3. Generate unique vault path for the new version
-        const { absolutePath: vaultFilePath, relativePath: relativeVaultPath } = await generateUniqueVaultPath(sourcePath);
+        await fs.access(sourcePath);
+        
+        const pathData = await generateUniqueVaultPath(sourcePath);
+        vaultFilePath = pathData.absolutePath;
+        const relativeVaultPath = pathData.relativePath;
 
-        // 4. Copy source file to the vault
         await fs.copyFile(sourcePath, vaultFilePath);
+        console.log(`Copied ${sourcePath} to ${vaultFilePath}`);
 
-        // 5. Get file stats for the new version
         const stats = await fs.stat(vaultFilePath);
         const mimeType = mime.lookup(vaultFilePath) || 'application/octet-stream';
-        const originalFileName = path.basename(sourcePath); // Use the *new* source file's name
         const createdAt = new Date().toISOString();
 
-        // 6. Determine the next version number
-        const result = getMaxVersionNoStmt.get({ masterId });
-        const nextVersionNo = (result?.max_version ?? 0) + 1;
+        const tx = db.transaction(() => {
+            // Use re-added statement variable
+            const versionInfo = getMaxVersionNoStmt.get({ masterId });
+            const nextVersionNo = (versionInfo?.max_version ?? 0) + 1;
 
-        // 7. Insert new asset record cloning master's metadata but with new path, masterId, and versionNo
-        const info = insertVersionStmt.run({
-            fileName: originalFileName, // Use the name of the source file being added as a version
-            filePath: relativeVaultPath, // New relative path
-            mimeType: mimeType,
-            size: stats.size,
-            createdAt: createdAt,
-            year: masterAsset.year,             // Clone from master
-            advertiser: masterAsset.advertiser, // Clone from master
-            niche: masterAsset.niche,           // Clone from master
-            shares: masterAsset.shares,         // Clone from master (or set to null/0?) - cloning for now
-            masterId: masterId,                 // Link to master
-            versionNo: nextVersionNo            // Set new version number
+            // Use re-added statement variable
+            const info = insertVersionStmt.run({
+                fileName: masterAsset.fileName,
+                filePath: relativeVaultPath,
+                mimeType: mimeType,
+                size: stats.size,
+                createdAt: createdAt,
+                year: masterAsset.year,
+                advertiser: masterAsset.advertiser,
+                niche: masterAsset.niche,
+                shares: masterAsset.shares,
+                masterId: masterId,
+                versionNo: nextVersionNo
+            });
+
+            if (typeof info.lastInsertRowid !== 'number' && typeof info.lastInsertRowid !== 'bigint') {
+                 throw new Error('Failed to get ID of newly created version.');
+            }
+            console.log(`✅ Version ${info.lastInsertRowid} (v${nextVersionNo}) created for master ${masterId}.`);
+            return { newId: info.lastInsertRowid as number, nextVersionNo };
         });
 
-        const newAssetId = info.lastInsertRowid as number;
-        if (!newAssetId) {
-           throw new Error('Failed to get ID of newly created version asset.');
+        const dbResult = tx();
+        newVersionId = dbResult.newId;
+
+        if (newVersionId && vaultFilePath) {
+            generateThumbnail(newVersionId, vaultFilePath).catch(err => {
+                console.error(`Failed to generate thumbnail for new version asset ${newVersionId}:`, err);
+            });
         }
 
-        // 8. Trigger thumbnail generation asynchronously
-        generateThumbnail(newAssetId, vaultFilePath).catch(err => {
-            console.error(`Failed to generate thumbnail for version asset ${newAssetId}:`, err);
-        });
-
-        console.log(`✅ Version asset created with ID: ${newAssetId}, Version No: ${nextVersionNo} for Master ID: ${masterId}`);
-        return { success: true, newId: newAssetId };
+        return { success: true, newId: newVersionId };
 
     } catch (error: any) {
-        console.error('❌ Failed to create version asset:', error);
-        // Attempt to clean up copied file if insertion failed after copy
-        if (error.message.includes('Failed to get ID') || error.message.includes('INSERT')) {
-             try {
-                const { absolutePath } = await generateUniqueVaultPath(sourcePath); // Re-generate to be sure
-                await fs.unlink(absolutePath);
-                console.log(`🧹 Cleaned up copied file: ${absolutePath}`);
-             } catch (cleanupError) {
-                console.error(`🧹 Failed to cleanup copied file after error:`, cleanupError);
-             }
+        console.error(`❌ Error creating version for master ${masterId} from ${sourcePath}: `, error);
+        if (vaultFilePath) {
+            try {
+                await fs.unlink(vaultFilePath);
+                console.log('Attempting to clean up copied file: ' + vaultFilePath);
+            } catch (cleanupError) {
+                 console.error('Failed cleanup for '+ vaultFilePath, cleanupError);
+            }
         }
-        return { success: false, error: error.message || 'An unknown error occurred' };
+        return { success: false, error: error.message || 'Failed to create version' };
     }
   });
 
   ipcMain.handle('get-versions', async (_, { masterId }: { masterId: number }): Promise<{ success: boolean, assets?: AssetWithThumbnail[], error?: string }> => {
-    console.log(`⚙️ get-versions invoked for masterId: ${masterId}`);
-    try {
-        const assets = getVersionsStmt.all(masterId) as Asset[]; // Fetch all versions for the master ID
-
-        const assetsWithThumbnails: AssetWithThumbnail[] = [];
-        for (const asset of assets) {
-            const thumbnailPath = await getExistingThumbnailPath(asset.id);
-            // Ensure shares is number or null
-            const sharesAsNumber = typeof asset.shares === 'string' ? parseInt(asset.shares, 10) : asset.shares;
-
-            assetsWithThumbnails.push({
-                ...asset,
-                shares: isNaN(sharesAsNumber as number) ? null : sharesAsNumber,
-                // accumulatedShares is not calculated for individual versions here, only for masters in get-assets
-                thumbnailPath
-            });
-        }
-        console.log(`✅ Found ${assetsWithThumbnails.length} versions for master ID: ${masterId}`);
-        return { success: true, assets: assetsWithThumbnails };
-    } catch (error: any) {
-        console.error(`❌ Failed to get versions for masterId ${masterId}:`, error);
-        return { success: false, error: error.message || 'An unknown error occurred' };
-    }
-  });
-
-  ipcMain.handle('add-to-group', async (_, { versionId, masterId }: { versionId: number, masterId: number }): Promise<{ success: boolean, error?: string }> => {
-     console.log(`⚙️ add-to-group invoked: adding versionId ${versionId} to masterId ${masterId}`);
-     try {
-        // Ensure the target masterId exists and is a master itself (master_id IS NULL)
-        const masterAsset = getAssetByIdStmt.get(masterId);
-        if (!masterAsset) {
-            throw new Error(`Target master asset with ID ${masterId} not found.`);
-        }
-        if ((masterAsset as any).master_id !== null) { // FIX: Use type assertion
-             throw new Error(`Target asset ID ${masterId} is not a master asset.`);
-        }
-        // Ensure the versionId exists
-         const versionAsset = getAssetByIdStmt.get(versionId);
-         if (!versionAsset) {
-             throw new Error(`Asset to be added (ID ${versionId}) not found.`);
-         }
-         // Prevent adding a master to a group or adding an asset to itself
-         if ((versionAsset as any).master_id === null && versionId !== masterId) { // FIX: Use type assertion
-             // Only proceed if versionId is currently a master and not the target master
-             const info = setMasterIdStmt.run(masterId, masterId, versionId); // Pass masterId twice for the subquery
-             console.log(`✅ Rows affected by add-to-group: ${info.changes}`);
-             return { success: info.changes > 0 };
-         } else if (versionId === masterId) {
-             throw new Error(`Cannot add an asset to its own group.`);
-         } else {
-             // Asset is already part of *another* group or is not a master
-             console.warn(`⚠️ Asset ${versionId} could not be added to group ${masterId}. It might already be a version or not exist.`);
-             // Allow re-assigning to the same group? For now, let's say no unless explicitly requested.
-             // If we want to allow moving from one group to another, this logic needs adjustment.
-             // Currently, it only allows adding *existing master* assets to a group.
-             return { success: false, error: `Asset ${versionId} is already a version or cannot be added.` };
-         }
-
-     } catch (error: any) {
-        console.error(`❌ Failed to add asset ${versionId} to group ${masterId}:`, error);
-        return { success: false, error: error.message || 'An unknown error occurred' };
-     }
-  });
-
-  ipcMain.handle('remove-from-group', async (_, { versionId }: { versionId: number }): Promise<{ success: boolean, error?: string }> => {
-      console.log(`⚙️ remove-from-group invoked for versionId: ${versionId}`);
+      console.log(`🔍 get-versions invoked for master ID: ${masterId}`);
       try {
-         // Ensure the asset exists and is currently a version (master_id IS NOT NULL)
-         const asset = getAssetByIdStmt.get(versionId);
-         if (!asset) {
-             throw new Error(`Asset with ID ${versionId} not found.`);
-         }
-         if ((asset as any).master_id === null) { // FIX: Use type assertion
-            console.warn(`⚠️ Asset ${versionId} is already a master asset.`);
-            return { success: false, error: `Asset ${versionId} is not currently part of a group.` };
-         }
+          // Use re-added statement variable
+          const versions = getVersionsStmt.all(masterId) as Asset[];
 
-         const info = clearMasterIdStmt.run(versionId);
-         console.log(`✅ Rows affected by remove-from-group: ${info.changes}`);
-         return { success: info.changes > 0 };
+          const versionsWithThumbnails: AssetWithThumbnail[] = [];
+          for (const version of versions) {
+              const thumbnailPath = await getExistingThumbnailPath(version.id);
+              const sharesAsNumber = typeof version.shares === 'string' ? parseInt(version.shares, 10) : version.shares;
+              versionsWithThumbnails.push({ 
+                  ...version, 
+                  shares: isNaN(sharesAsNumber as number) ? null : sharesAsNumber,
+                  thumbnailPath,
+                  accumulatedShares: null 
+              });
+          }
+          console.log(`Found ${versionsWithThumbnails.length} versions for master ${masterId}.`);
+          return { success: true, assets: versionsWithThumbnails };
       } catch (error: any) {
-         console.error(`❌ Failed to remove asset ${versionId} from group:`, error);
-         return { success: false, error: error.message || 'An unknown error occurred' };
+          console.error(`❌ Error getting versions for master ${masterId}: `, error);
+          return { success: false, error: error.message || 'Failed to get versions' };
       }
   });
 
-  // --- End Versioning IPC Handlers ---
+  ipcMain.handle('add-to-group', async (_, { versionId, masterId }: { versionId: number, masterId: number }): Promise<{ success: boolean, error?: string }> => {
+      console.log(`➕ add-to-group invoked: adding asset ${versionId} to master ${masterId}'s group`);
+      const tx = db.transaction(() => {
+          try {
+              // Use re-added statement variables
+              const assetToAdd = getAssetByIdStmt.get(versionId);
+              const targetMaster = getAssetByIdStmt.get(masterId);
 
-  // --- End IPC Handlers ---
+              // Fix type errors: Check if master_id exists and is not null
+              if (!assetToAdd) return { success: false, error: `Asset to add (ID: ${versionId}) not found.` };
+              if (assetToAdd.master_id !== undefined && assetToAdd.master_id !== null) return { success: false, error: `Asset ${versionId} is already a version.` };
+              if (!targetMaster) return { success: false, error: `Target master asset (ID: ${masterId}) not found.` };
+              if (targetMaster.master_id !== undefined && targetMaster.master_id !== null) return { success: false, error: `Target asset ${masterId} is itself a version, cannot add to it.` };
+              if (versionId === masterId) return { success: false, error: 'Cannot add an asset to its own group.' };
 
-  createAppWindow()
+              // Use re-added statement variable
+              const info = setMasterIdStmt.run(masterId, masterId, versionId); 
 
-  optimizer.watchWindowShortcuts(BrowserWindow.getAllWindows()[0])
+              if (info.changes === 0) {
+                  console.warn(`add-to-group: No changes made when setting master_id for asset ${versionId}.`);
+                  return { success: false, error: 'Failed to update asset relationship. Asset may not exist or already be a version.' };
+              }
+              console.log(`✅ Asset ${versionId} successfully added to group of master ${masterId}.`);
+              return { success: true };
+          } catch (error: any) {
+              console.error(`❌ Error adding asset ${versionId} to group ${masterId}: `, error);
+              return { success: false, error: error.message || 'Failed to add asset to group' };
+          }
+      });
+      return tx();
+  });
 
-  app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createAppWindow()
-  })
-})
+  ipcMain.handle('remove-from-group', async (_, { versionId }: { versionId: number }): Promise<{ success: boolean, error?: string }> => {
+      console.log(`➖ remove-from-group invoked for version ID: ${versionId}`);
+      const tx = db.transaction(() => {
+          try {
+              // Use re-added statement variables
+              const asset = getAssetByIdStmt.get(versionId);
+              if (!asset) {
+                  return { success: false, error: `Asset with ID ${versionId} not found.` };
+              }
+              // Fix type error: Check if master_id is null or undefined
+              if (asset.master_id === null || asset.master_id === undefined) {
+                  console.log(`Asset ${versionId} is already a master, no action needed for remove-from-group.`);
+                  return { success: true };
+              }
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    // Close the database connection when the app quits
-    if (db && db.open) {
-      db.close();
-      console.log('Database connection closed.');
-    }
-    app.quit()
-  }
-})
+              // Use re-added statement variable
+              const info = clearMasterIdStmt.run(versionId);
 
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.
+              if (info.changes === 0) {
+                  console.warn(`remove-from-group: No changes made when clearing master_id for asset ${versionId}. Asset may not exist or already be a master.`);
+                  // Still return success as the desired state (being a master) is achieved or it didn't exist
+                  return { success: true }; 
+              }
+              console.log(`✅ Asset ${versionId} successfully removed from its group and became a master asset.`);
+              return { success: true };
+          } catch (error: any) {
+              console.error(`❌ Error removing asset ${versionId} from group: `, error);
+              return { success: false, error: error.message || 'Failed to remove asset from group' };
+          }
+      });
+      // Ensure the main handler returns the result of the transaction execution
+      return tx(); 
+  });
+
+  // --- App Lifecycle ---
+
+  // ... existing code ...
+});
+
+// ... existing code ...

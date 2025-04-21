@@ -47,8 +47,8 @@ export function initializeDatabase(db: Database.Database): void {
   `);
 
   // PRAGMA user_version is a way to manage schema versions
-  const { user_version } = db.pragma('user_version', { simple: true }) as { user_version: number };
-  console.log(`Database user_version: ${user_version}`);
+  // Read the version FIRST
+  const user_version = db.pragma('user_version', { simple: true }) as number;
 
   if (user_version === 0) {
     // Migration from initial schema (version 0) to version 1
@@ -77,21 +77,27 @@ export function initializeDatabase(db: Database.Database): void {
       db.exec(`ALTER TABLE assets ADD COLUMN master_id INTEGER REFERENCES assets(id) ON DELETE SET NULL;`);
       db.exec(`ALTER TABLE assets ADD COLUMN version_no INTEGER NOT NULL DEFAULT 1;`);
       db.exec(`CREATE INDEX IF NOT EXISTS idx_assets_master ON assets(master_id);`);
-      console.log("Successfully added version control columns (master_id, version_no) and index (idx_assets_master).");
+      // Add the requested composite index
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_assets_master_version ON assets(master_id, version_no);`);
+      console.log("Successfully added version control columns (master_id, version_no) and indexes (idx_assets_master, idx_assets_master_version).");
     } catch (error: any) {
-        // Ignore errors like "duplicate column name" if the migration is re-run
-        if (!error.message.includes('duplicate column name')) {
-          console.error("Error adding version control columns/index:", error);
+        // Ignore errors like "duplicate column name" or "index ... already exists" if the migration is re-run
+        if (!error.message.includes('duplicate column name') && !error.message.includes('already exists')) {
+          console.error("Error adding version control columns/indexes:", error);
           // Depending on the error, you might want to throw it or handle it differently
         } else {
-          console.log("Version control columns/index already exist.");
+          console.log("Version control columns/indexes already exist.");
         }
     }
 
     // Set the new version
     db.pragma(`user_version = 1`);
     console.log("Migration to version 1 complete. Set user_version = 1.");
+    // user_version is read-only; skip reassign
   }
+
+  // Log the final version AFTER potential migration
+  console.log(`Database user_version: ${user_version}`);
 
   // PRD §4.2 Data Model - Add index for faster lookups by path
   db.exec(`CREATE INDEX IF NOT EXISTS idx_assets_filePath ON assets (filePath);`);

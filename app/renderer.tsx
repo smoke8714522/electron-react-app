@@ -4,6 +4,8 @@ import App from './components/App'
 import appIcon from '@/resources/build/icon.png'
 import { WindowContextProvider, menuItems } from '@/lib/window'
 import '@/lib/window/window.css'
+import Modal from 'react-modal';
+Modal.setAppElement('#app');
 
 ReactDOM.createRoot(document.getElementById('app') as HTMLElement).render(
   <React.StrictMode>
