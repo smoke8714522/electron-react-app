@@ -57,6 +57,42 @@ const LibraryView: React.FC<LibraryViewProps> = ({
     const [sortBy, setSortBy] = useState<FetchSort['sortBy']>('createdAt');
     const [sortOrder, setSortOrder] = useState<FetchSort['sortOrder']>('DESC');
 
+    // --- Handler for Sort Dropdown Change ---
+    const handleSortChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+        const value = event.target.value;
+        if (value === 'newest') {
+            setSortBy('createdAt');
+            setSortOrder('DESC');
+        } else if (value === 'oldest') {
+            setSortBy('createdAt');
+            setSortOrder('ASC');
+        } else if (value === 'fileName-asc') {
+            setSortBy('fileName');
+            setSortOrder('ASC');
+        } else if (value === 'fileName-desc') {
+            setSortBy('fileName');
+            setSortOrder('DESC');
+        } else if (value === 'year-desc') {
+            setSortBy('year');
+            setSortOrder('DESC');
+        } else if (value === 'year-asc') {
+            setSortBy('year');
+            setSortOrder('ASC');
+        } else if (value === 'shares-desc') {
+            setSortBy('shares');
+            setSortOrder('DESC');
+        } else if (value === 'shares-asc') {
+            setSortBy('shares');
+            setSortOrder('ASC');
+        } else if (value === 'totalShares-desc') { // New option
+            setSortBy('accumulatedShares');
+            setSortOrder('DESC');
+        } else if (value === 'totalShares-asc') { // New option
+            setSortBy('accumulatedShares');
+            setSortOrder('ASC');
+        }
+    };
+
     // --- PRD §4.1 Library View: Dynamic Options for Filters --- 
     const availableYears = useMemo(() => {
         const years = new Set(assets.map(a => a.year).filter((y): y is number => y !== null && y !== 0));
@@ -427,26 +463,36 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                         {/* Right Actions: Sort, View Mode */}
                         <div className="flex items-center space-x-3">
                             {/* Sort Dropdown */}
-                            <div className="flex items-center space-x-1">
-                                <label htmlFor="sort-by" className="text-sm text-gray-400">Sort by:</label>
+                            <div className="flex items-center space-x-2">
+                                <label htmlFor="sort-by" className="sr-only">Sort by</label>
                                 <select 
                                     id="sort-by"
-                                    value={`${sortBy}-${sortOrder}`}
-                                    onChange={(e) => {
-                                        const [newSortBy, newSortOrder] = e.target.value.split('-') as [FetchSort['sortBy'], FetchSort['sortOrder']];
-                                        setSortBy(newSortBy);
-                                        setSortOrder(newSortOrder);
-                                    }}
-                                    className="px-2 py-1 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-sm"
+                                    value={
+                                        sortBy === 'createdAt' && sortOrder === 'DESC' ? 'newest' :
+                                        sortBy === 'createdAt' && sortOrder === 'ASC' ? 'oldest' :
+                                        sortBy === 'fileName' && sortOrder === 'ASC' ? 'fileName-asc' :
+                                        sortBy === 'fileName' && sortOrder === 'DESC' ? 'fileName-desc' :
+                                        sortBy === 'year' && sortOrder === 'DESC' ? 'year-desc' :
+                                        sortBy === 'year' && sortOrder === 'ASC' ? 'year-asc' :
+                                        sortBy === 'shares' && sortOrder === 'DESC' ? 'shares-desc' :
+                                        sortBy === 'shares' && sortOrder === 'ASC' ? 'shares-asc' :
+                                        sortBy === 'accumulatedShares' && sortOrder === 'DESC' ? 'totalShares-desc' :
+                                        sortBy === 'accumulatedShares' && sortOrder === 'ASC' ? 'totalShares-asc' :
+                                        'newest' // Default fallback
+                                    }
+                                    onChange={handleSortChange} 
+                                    className="px-2 py-1.5 bg-gray-700 border border-gray-600 rounded focus:outline-none focus:border-blue-500 text-sm"
                                 >
-                                    <option value="createdAt-DESC">Newest</option>
-                                    <option value="createdAt-ASC">Oldest</option>
-                                    <option value="fileName-ASC">Name (A-Z)</option>
-                                    <option value="fileName-DESC">Name (Z-A)</option>
-                                    <option value="year-DESC">Year (High-Low)</option>
-                                    <option value="year-ASC">Year (Low-High)</option>
-                                    <option value="shares-DESC">Shares (High-Low)</option> 
-                                    <option value="shares-ASC">Shares (Low-High)</option> 
+                                    <option value="newest">Newest First</option>
+                                    <option value="oldest">Oldest First</option>
+                                    <option value="fileName-asc">Filename (A-Z)</option>
+                                    <option value="fileName-desc">Filename (Z-A)</option>
+                                    <option value="year-desc">Year (High-Low)</option>
+                                    <option value="year-asc">Year (Low-High)</option>
+                                    <option value="shares-desc">Shares (High-Low)</option>
+                                    <option value="shares-asc">Shares (Low-High)</option>
+                                    <option value="totalShares-desc">Total Shares (High-Low)</option>
+                                    <option value="totalShares-asc">Total Shares (Low-High)</option>
                                 </select>
                             </div>
 

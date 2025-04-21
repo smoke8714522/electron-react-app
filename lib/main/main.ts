@@ -59,7 +59,7 @@ interface AssetFilters {
 
 // PRD §4.1 Library View: Define structure for sorting from renderer
 interface AssetSort {
-    sortBy?: 'fileName' | 'year' | 'shares' | 'createdAt'; // Added createdAt for default/newest
+    sortBy?: 'fileName' | 'year' | 'shares' | 'createdAt' | 'accumulatedShares'; // Added accumulatedShares
     sortOrder?: 'ASC' | 'DESC';
 }
 
@@ -162,67 +162,46 @@ app.whenReady().then(() => {
             query += ' WHERE ' + whereClauses.join(' AND ');
         }
 
-        // Apply Sorting (PRD §4.1 Library View) - Apply to master asset 'a'
-        const sortBy = params?.sort?.sortBy || 'createdAt'; // Default sort by newest
-        const sortOrder = params?.sort?.sortOrder || 'DESC';
-        const validSortColumns = ['fileName', 'year', 'shares', 'createdAt'];
-        if (validSortColumns.includes(sortBy)) {
-            // Note: Sorting by master's own shares, not accumulated
-            query += ` ORDER BY a.${sortBy} ${sortOrder === 'ASC' ? 'ASC' : 'DESC'}`;
-        }
-
         // Step 1: Add GROUP BY clause due to aggregate functions
         query += ` GROUP BY a.id`;
 
-        // Step 1: Adjust sorting logic - need to re-apply ORDER BY *after* GROUP BY
-        // If sorting by calculated fields, we need to use the alias or recalculate here.
-        // Simple approach: Re-apply sorting based on original columns for now.
-        // Complex sorting (by versionCount/accumulatedShares) would require modifying the ORDER BY clause.
-        // Reset query and rebuild with GROUP BY and ORDER BY at the end
+        // Apply Sorting (PRD §4.1 Library View) - After GROUP BY
+        const sortBy = params?.sort?.sortBy || 'createdAt'; // Default sort by newest
+        const sortOrder = params?.sort?.sortOrder || 'DESC';
+        const validSortColumns = ['fileName', 'year', 'shares', 'createdAt', 'accumulatedShares']; // Added accumulatedShares
+        const orderDirection = sortOrder === 'ASC' ? 'ASC' : 'DESC';
 
-        query = `
-          SELECT
-            a.id, a.fileName, a.filePath, a.mimeType, a.size, a.createdAt,
-            a.year, a.advertiser, a.niche, a.shares, a.master_id, a.version_no,
-            a.shares + COALESCE(SUM(v.shares), 0) AS accumulatedShares,
-            1 + COUNT(v.id) AS versionCount
-          FROM assets a
-          LEFT JOIN assets v ON v.master_id = a.id
-        `;
-
-        if (whereClauses.length > 0) {
-            query += ' WHERE ' + whereClauses.join(' AND ');
-        }
-
-        query += ` GROUP BY a.id`; // Apply GROUP BY
-
-        // Re-apply Sorting (ensure valid columns are used)
         if (validSortColumns.includes(sortBy)) {
-             query += ` ORDER BY a.${sortBy} ${sortOrder === 'ASC' ? 'ASC' : 'DESC'}`;
+            if (sortBy === 'accumulatedShares') {
+                // Sort by the calculated alias
+                query += ` ORDER BY accumulatedShares ${orderDirection}`;
+            } else {
+                // Sort by a standard column from the 'a' (master asset) table
+                query += ` ORDER BY a.${sortBy} ${orderDirection}`;
+            }
+        } else {
+            // Default sort if invalid column provided (or just use createdAt DESC?)
+            console.warn(`Invalid sortBy column provided: ${sortBy}. Defaulting to createdAt DESC.`);
+            query += ` ORDER BY a.createdAt DESC`;
         }
-        // If sorting by accumulatedShares or versionCount is needed later, adjust ORDER BY here
-        // Example: query += ` ORDER BY accumulatedShares ${sortOrder === 'ASC' ? 'ASC' : 'DESC'}`;
 
-        const assetsFromDb = db.prepare(query).all(...queryParams) as Asset[];
+        // Prepare and execute the final query
+        console.log('Executing SQL:', query);
+        console.log('With Params:', queryParams);
+        const stmt = db.prepare(query);
+        const assets: Asset[] = stmt.all(...queryParams) as Asset[];
 
-      const assetsWithThumbnails: AssetWithThumbnail[] = [];
-      // Iterate and add thumbnail path if it exists
-      for (const asset of assetsFromDb) {
-        const thumbnailPath = await getExistingThumbnailPath(asset.id);
-            // Ensure shares is a number or null
-            const sharesAsNumber = typeof asset.shares === 'string' ? parseInt(asset.shares, 10) : asset.shares;
-            // Step 1: Get calculated fields from the result row
-            const accumulatedShares = (asset as any).accumulatedShares;
-            const versionCount = (asset as any).versionCount;
-
-            assetsWithThumbnails.push({ 
-                ...asset, 
-                shares: isNaN(sharesAsNumber as number) ? null : sharesAsNumber,
-                accumulatedShares: typeof accumulatedShares === 'number' ? accumulatedShares : null,
-                versionCount: typeof versionCount === 'number' ? versionCount : null,
-                thumbnailPath
-            });
-      }
+        // Fetch existing thumbnail paths asynchronously
+        const assetsWithThumbnails: AssetWithThumbnail[] = await Promise.all(assets.map(async (asset) => {
+            const thumbnailPath = await getExistingThumbnailPath(asset.id); // Await the promise
+            return {
+                ...asset,
+                shares: typeof asset.shares === 'number' ? asset.shares : null,
+                accumulatedShares: typeof asset.accumulatedShares === 'number' ? asset.accumulatedShares : null,
+                versionCount: typeof asset.versionCount === 'number' ? asset.versionCount : null,
+                thumbnailPath: thumbnailPath ? `/cache/thumbnails/${path.basename(thumbnailPath)}` : null // Now thumbnailPath is string | null
+            };
+        }));
         
       return assetsWithThumbnails;
     } catch (error) {

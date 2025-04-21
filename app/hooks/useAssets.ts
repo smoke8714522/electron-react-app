@@ -92,7 +92,7 @@ export interface FetchFilters {
 
 // PRD §4.1 Library View - Define structure for sorting passed to fetchAssets
 export interface FetchSort {
-    sortBy?: 'fileName' | 'year' | 'shares' | 'createdAt';
+    sortBy?: 'fileName' | 'year' | 'shares' | 'createdAt' | 'accumulatedShares';
     sortOrder?: 'ASC' | 'DESC';
 }
 
