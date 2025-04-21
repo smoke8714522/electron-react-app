@@ -170,15 +170,15 @@ The project follows a structure separating the Electron main process, the React 
     *   Includes cells for selection checkbox, thumbnail, metadata, conditional accumulated shares, and history button.
     *   Passes selection changes via `onSelect` prop and history clicks via `onHistory` prop.
 *   **Bulk Edit Modal Component**: `app/components/BulkEditModal.tsx` (New)
-    *   Modal dialog for batch editing metadata of selected assets (PRD §4.1 Library View).
+    *   Modal dialog for batch editing metadata of selected assets (PRD §4.1 Library View), implemented using `react-modal`.
     *   Displays fields for `year`, `advertiser`, `niche`, `shares`.
     *   Each field has an associated "Apply" checkbox; only checked fields are included in the update.
     *   Props:
         *   `isOpen: boolean`: Controls modal visibility.
-        *   `onClose: () => void`: Callback to close the modal.
+        *   `onClose: () => void`: Callback to close the modal (invoked by `react-modal` on request close).
         *   `onSave: (updates: BulkUpdatePayload) => Promise<void>`: Callback triggered on save, passing an object with only the checked fields and their values.
         *   `selectedCount: number`: Displays the number of assets being edited.
-    *   Styled using Tailwind CSS.
+    *   Styled using Tailwind CSS applied via `react-modal` props (`className`, `overlayClassName`).
 *   **React State Management (Assets)**: `app/hooks/useAssets.ts`
     *   Custom hook (`useAssets`) managing the list of assets (`AssetWithThumbnail[]`).
     *   Provides `fetchAssets(filters?: FetchFilters, sort?: FetchSort)`, `bulkImportAssets`, `updateAsset`, `deleteAsset`, `bulkUpdateAssets` functions which invoke corresponding IPC handlers.
