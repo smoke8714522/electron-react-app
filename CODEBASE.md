@@ -26,6 +26,9 @@ The project follows a structure separating the Electron main process, the React 
 ├── main/                 # Contains main process related files like schema
 │   └── schema.ts         # Database schema and Asset/CustomField types
 ├── out/                  # Build output directory
+├── public/              # Static assets served at `/` (via `publicDir` in Vite)
+│   └── cache/             # Generated thumbnails and other runtime assets
+│       └── thumbnails/    # JPEG thumbnails (`<id>.jpg`)
 ├── resources/            # Static assets (e.g., icons)
 ├── vault/                # Directory for storing imported asset files (gitignored)
 ├── electron.vite.config.ts # Vite configuration for Electron
@@ -53,16 +56,16 @@ The project follows a structure separating the Electron main process, the React 
     *   Defines the `CustomField` TypeScript interface.
     *   Contains the `initializeDatabase` function for `assets` and `custom_fields` tables. Includes migration logic to rename `adspower` column to `shares`.
 *   **Thumbnail Service**: `lib/main/ThumbnailService.ts`
-    *   Provides `generateThumbnail`, `deleteThumbnail`, `getExistingThumbnailPath` functions.
-    *   Generates thumbnails for images (using `nativeImage`), videos (via `ffmpeg`), and PDFs (via `pdftocairo`).
-    *   Stores thumbnails in a cache directory within the user data path (`<userData>/cache/thumbnails/<asset-id>.jpg`).
+    *   Provides `generateThumbnail(assetId, sourcePath)`, `deleteThumbnail(assetId)`, `getExistingThumbnailPath(assetId)` functions.
+    *   Uses `sharp` to generate JPEG thumbnails (resized to 400px width, quality 90).
+    *   Thumbnails are saved to `public/cache/thumbnails/<asset-id>.jpg` and served by Vite at `/cache/thumbnails/<asset-id>.jpg` via `publicDir`.
 *   **IPC Handlers**: Defined in `lib/main/main.ts` using `ipcMain.handle`:
     *   `get-assets`: Fetches asset metadata. 
         *   Accepts optional `params: { filters?: AssetFilters, sort?: AssetSort }`.
         *   `AssetFilters`: `{ year?: number | null, advertiser?: string | null, niche?: string | null, sharesMin?: number | null, sharesMax?: number | null }`.
         *   `AssetSort`: `{ sortBy?: 'fileName' | 'year' | 'shares' | 'createdAt', sortOrder?: 'ASC' | 'DESC' }`.
         *   Dynamically builds SQL query based on filters and sorting.
-        *   Returns `Promise<AssetWithThumbnail[]>` including an optional `thumbnailPath` (`file://` URL) if a cached thumbnail exists and ensures `shares` is `number | null`.
+        *   Returns `Promise<AssetWithThumbnail[]>` including an optional `thumbnailPath` (static `/cache/thumbnails/<asset-id>.jpg`) if a cached thumbnail exists and ensures `shares` is `number | null`.
     *   `open-file-dialog`: Uses Electron's `dialog.showOpenDialog`.
     *   `create-asset`: Takes a source file path, copies the file to the vault (using `path.win32` for relative DB path), generates unique name (hash-based), extracts metadata, inserts into `assets` table (using `shares: null` initially), and asynchronously triggers thumbnail generation. Returns `{ success: boolean, asset?: AssetWithThumbnail, error?: string }`.
     *   `bulk-import-assets`: Opens a multi-select file dialog (images, videos, PDFs, text). For each valid file, performs the same actions as `create-asset` (using `shares: null` initially). Returns `{ success: boolean, importedCount: number, assets?: AssetWithThumbnail[], errors: { file: string, error: string }[] }`.
@@ -92,7 +95,7 @@ The project follows a structure separating the Electron main process, the React 
         *   **Main Content Area** (`<main>`): Takes remaining width (`flex-1`). Contains a sticky top toolbar and the scrollable asset display area.
             *   **Sticky Top Toolbar**: Contains main action buttons ("Bulk Import", "Refresh"), a "Sort by" dropdown, a "Grid/List" view toggle, and **conditional batch action controls** that appear when assets are selected (`selectedCount`, "Edit Metadata" button, "Delete Selected" button). Toolbar remains visible when scrolling assets.
                 *   **Sort Dropdown**: Allows sorting by Newest/Oldest (default), FileName (A-Z, Z-A), Year (High-Low, Low-High), Shares (High-Low, Low-High).
-            *   **Asset Display Area**: Scrollable area (`overflow-y-auto`). Displays assets (fetched based on current filters/sort) using either `AssetCard` components in a responsive grid (default) or `AssetListItem` components in a table (list view) based on the view toggle state.
+            *   **Asset Display Area**: Scrollable area (`overflow-y-auto`). Displays assets (fetched based on current filters/sort) using either `AssetCard` components in a responsive grid (default) or inline `<tr>`/`<td>` elements within a `<table>` (list view) based on the view toggle state.
             *   **Asset Display Area**: Scrollable area (`overflow-y-auto`). Displays assets (fetched based on current filters/sort) using either `AssetCard` components in a responsive grid (default) or inline `<tr>`/`<td>` elements within a `<table>` (list view) based on the view toggle state.
                 *   The grid container uses `items-start` and `content-start` to prevent cards from stretching vertically, especially in the last row when it's not full.
     *   `AssetCard`: Displays thumbnail, key metadata (`fileName`, `year`, `advertiser`, `niche`, `shares`), and includes a checkbox for multi-select. Clicking the card toggles selection.

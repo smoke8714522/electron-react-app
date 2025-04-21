@@ -37,7 +37,8 @@ interface AssetWithThumbnail extends Asset {
   thumbnailPath?: string | null; 
 }
 
-// PRD §4.1 Library View - Define structure for filters from renderer
+// PRD §4.1 Library View: Update get-assets to handle filtering and sorting
+// PRD §4.1 Library View: Define structure for filters from renderer
 interface AssetFilters {
     year?: number | null;
     advertiser?: string | null;
@@ -46,7 +47,7 @@ interface AssetFilters {
     sharesMax?: number | null;
 }
 
-// PRD §4.1 Library View - Define structure for sorting from renderer
+// PRD §4.1 Library View: Define structure for sorting from renderer
 interface AssetSort {
     sortBy?: 'fileName' | 'year' | 'shares' | 'createdAt'; // Added createdAt for default/newest
     sortOrder?: 'ASC' | 'DESC';
@@ -75,6 +76,8 @@ async function generateUniqueVaultPath(originalFilePath: string): Promise<{ abso
     // Use path.win32.join for the vault path, as per constraint
     const relativePathWin = path.win32.join(uniqueFileName);
     const absolutePath = path.join(VAULT_ROOT, uniqueFileName); // Use platform native join for fs operations
+
+    console.log('🔍 generateUniqueVaultPath', { originalFilePath, uniqueFileName, absolutePath, relativePathWin });
 
     // Basic check - collisions highly unlikely with hash, but could add check/retry if needed
     try {
@@ -164,6 +167,7 @@ app.whenReady().then(() => {
   })
 
   ipcMain.handle('create-asset', async (_, sourcePath: string): Promise<{ success: boolean, asset?: AssetWithThumbnail, error?: string }> => {
+    console.log('⚙️ create-asset invoked with sourcePath:', sourcePath);
     try {
       // Check source exists
       await fs.access(sourcePath); 
@@ -171,7 +175,8 @@ app.whenReady().then(() => {
       // Generate unique vault path (absolute for copy, relative for DB)
       // Uses path.win32 for relative path stored in DB as per constraints
       const { absolutePath: vaultFilePath, relativePath: relativeVaultPath } = await generateUniqueVaultPath(sourcePath);
-      
+      console.log('🔹 generateUniqueVaultPath returned vaultFilePath, relativeVaultPath:', vaultFilePath, relativeVaultPath);
+
       // Copy file to vault using the platform-specific absolute path
       await fs.copyFile(sourcePath, vaultFilePath);
 
@@ -194,33 +199,22 @@ app.whenReady().then(() => {
         niche: null,
         shares: null // Renamed from adspower, defaulting to null
       });
-      
+      console.log('🔹 DB insert info:', info);
+
       const newAssetId = info.lastInsertRowid;
+      console.log('🔹 newAssetId:', newAssetId);
+      console.log('🔹 about to generate thumbnail for assetId', newAssetId);
       if (typeof newAssetId !== 'number') {
          throw new Error('Failed to get ID of newly created asset.');
       }
 
-      // Generate thumbnail asynchronously (don't wait for it)
-      // PRD §4.3 Thumbnail Service: Trigger thumbnail generation after asset creation
-      generateThumbnail(newAssetId, vaultFilePath, mimeType)
-        .then(thumbPath => {
-            if (thumbPath) {
-                console.log(`Thumbnail generation initiated for asset ${newAssetId}`);
-            } else {
-                 console.log(`Thumbnail generation skipped or failed for asset ${newAssetId}`);
-            }
-        })
-        .catch(err => console.error(`Thumbnail generation background error for ${newAssetId}:`, err));
-
-      // Fetch the newly created asset to return all fields correctly
+      // Generate and await thumbnail
+      const thumbnailPath = await generateThumbnail(newAssetId, vaultFilePath);
+      console.log('🔹 generateThumbnail returned thumbnailPath:', thumbnailPath);
       const newAsset = getAssetByIdStmt.get(newAssetId) as Asset;
-      
-      // Check for existing thumbnail immediately (might not be ready, but check cache)
-      const thumbnailPath = await getExistingThumbnailPath(newAssetId);
-
       return {
         success: true,
-        asset: { ...newAsset, thumbnailPath } // Return asset with potential thumbnail path
+        asset: { ...newAsset, thumbnailPath }
       };
     } catch (error) {
       console.error('Failed to create asset:', error);
@@ -298,7 +292,7 @@ app.whenReady().then(() => {
 
             // Generate thumbnail asynchronously
             // PRD §4.3 Thumbnail Service: Trigger thumbnail generation
-            generateThumbnail(newAssetId, vaultFilePath, mimeType)
+            generateThumbnail(newAssetId, vaultFilePath)
                 .then(thumbPath => console.log(`Thumbnail initiated for bulk asset ${newAssetId}${thumbPath ? '' : ' (skipped or failed)'}`))
                 .catch(err => console.error(`Thumbnail background error for bulk asset ${newAssetId}:`, err));
 
@@ -334,7 +328,6 @@ app.whenReady().then(() => {
     return { ...results, assets: results.success ? importedAssets : [] }; 
   });
 
-  // PRD §4.1 Library View: Handle updates for one or more assets
   ipcMain.handle('update-asset', async (_, { id, updates }: { id: number, updates: Partial<Omit<Asset, 'id' | 'filePath' | 'mimeType' | 'size' | 'createdAt'>> & { customFields?: Record<string, string | null> } }): Promise<boolean> => {
     const validFields = ['fileName', 'year', 'advertiser', 'niche', 'shares']; // Include 'shares'
         const setClauses: string[] = [];
@@ -470,6 +463,21 @@ app.whenReady().then(() => {
     } 
     return null; // Return null if canceled or no file selected
   });
+
+  ipcMain.handle('regenerate-thumbnails', async (): Promise<{ regeneratedCount: number }> => {
+    const rows = db.prepare('SELECT id, filePath FROM assets').all() as { id: number; filePath: string }[];
+    let regeneratedCount = 0;
+    for (const { id, filePath } of rows) {
+      const existing = await getExistingThumbnailPath(id);
+      if (!existing) {
+        const absPath = path.join(VAULT_ROOT, filePath);
+        const thumb = await generateThumbnail(id, absPath);
+        if (thumb) regeneratedCount++;
+      }
+    }
+    return { regeneratedCount };
+  });
+
   // --- End IPC Handlers ---
 
   createAppWindow()

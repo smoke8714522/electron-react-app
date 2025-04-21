@@ -10,6 +10,7 @@ export default defineConfig({
         input: {
           main: resolve(__dirname, 'lib/main/main.ts'),
         },
+        external: ['sharp'],
       },
     },
     resolve: {
@@ -40,6 +41,7 @@ export default defineConfig({
   },
   renderer: {
     root: './app',
+    publicDir: resolve(__dirname, 'public'),
     build: {
       rollupOptions: {
         input: {
