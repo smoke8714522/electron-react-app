@@ -68,12 +68,12 @@ The project follows a structure separating the Electron main process, the React 
     *   The `get-assets` IPC handler also calculates and returns a new field `versionCount`. This represents the total number of assets in a version group (the master plus all its versions). The SQL calculation is `1 + COUNT(v.id) AS versionCount`. These calculations are performed using a `LEFT JOIN` from the `assets` table (aliased as `a`) to itself (aliased as `v`) on `v.master_id = a.id`, followed by a `GROUP BY a.id`.
     *   **UI**:
         *   The main asset gallery (`LibraryView.tsx`) displays **only master assets** (those with `master_id IS NULL`).
-        *   Each master asset card (`AssetCard` within `LibraryView.tsx`) displays:
+        *   Each master asset card (`AssetCard.tsx`) displays:
             *   A **Version Count badge** (e.g., `[Icon] 3`) in the top-right corner, showing the total number of assets in the group (`versionCount`). Displays `1` for standalone master assets. Uses the native HTML `title` attribute for hover details.
             *   A **Shares label** in the main content area, always labeled "Shares:". If `versionCount > 1`, the displayed value is the `accumulatedShares` (total of master + versions). Otherwise, it displays the master's own `shares`. Values are formatted with `toLocaleString()`. The native HTML `title` attribute clarifies if the displayed value is accumulated.
             *   A **History button** (clock icon) in the card footer. Clicking this button triggers the `onHistory` prop in `LibraryView.tsx`.
         *   `LibraryView.tsx` manages state (`historyMasterId`, `isHistoryModalOpen`) to control the `VersionHistoryModal`. It passes the `masterId` and `onClose` handler to the modal.
-        *   The List view also displays the `accumulatedShares` value and includes a History button per row, triggering the same `onHistory` handler. *(Note: List view might need updating to show `versionCount`)*.
+        *   The List view (`AssetList.tsx`, rendered by `LibraryView.tsx`) displays the `accumulatedShares` value and includes a History button per row (`AssetListRow.tsx`), triggering the same `onHistory` handler from `LibraryView.tsx`. *(Note: List view might need updating to show `versionCount`)*.
         *   **Version History Modal** (`app/components/VersionHistoryModal.tsx`):
             *   Props: `{ masterId: number | null; isOpen: boolean; onClose: () => void }`.
             *   Applies **dark mode styling** using Tailwind CSS (`bg-gray-900`, `text-gray-100`, etc.) for the modal container, header, body, and footer, ensuring legibility.
@@ -144,15 +144,31 @@ The project follows a structure separating the Electron main process, the React 
             *   The filter controls section (`div`) within the sidebar uses `overflow-y-auto flex-1 min-h-0` to enable independent scrolling when filters exceed available space.
         *   **Main Content Area** (`<main>`): Takes remaining width (`flex-1`). Contains a sticky top toolbar and the scrollable asset display area.
             *   **Sticky Top Toolbar**: Contains main action buttons ("Bulk Import", "Refresh"), a "Sort by" dropdown, a "Grid/List" view toggle, and **conditional batch action controls** that appear when assets are selected (`selectedCount`, "Edit Metadata" button, "Delete Selected" button). Toolbar remains visible when scrolling assets.
-                *   **Sort Dropdown**: Allows sorting by Newest/Oldest (default), FileName (A-Z, Z-A), Year (High-Low, Low-High), Shares (High-Low, Low-High).
-            *   **Asset Display Area**: Scrollable area (`overflow-y-auto`). Displays assets (fetched based on current filters/sort) using either `AssetCard` components in a responsive grid (default) or inline `<tr>`/`<td>` elements within a `<table>` (list view) based on the view toggle state.
-            *   **Asset Display Area**: Scrollable area (`overflow-y-auto`). Displays assets (fetched based on current filters/sort) using either `AssetCard` components in a responsive grid (default) or inline `<tr>`/`<td>` elements within a `<table>` (list view) based on the view toggle state.
-                *   The grid container uses `items-start` and `content-start` to prevent cards from stretching vertically, especially in the last row when it's not full.
-    *   `AssetCard`: Displays thumbnail, key metadata, a version count badge (top-right), and a shares label. The label is always "Shares:", but the value shown is conditional (accumulated or master's own shares) based on the version count. Hover details are provided via native `title` attributes. Includes history button in footer.
-    *   `AssetListItem`: Component removed. List view renders table rows (`<tr>`) with table data (`<td>`) cells directly within the `<tbody>`.
-    *   Implements multi-select functionality via checkboxes on `AssetCard` or within the list view `<tr>`. Selected count and batch actions ("Edit Metadata", "Delete Selected") appear in the main content toolbar.
+                *   **Sort Dropdown**: Allows sorting by Newest/Oldest (default), FileName (A-Z, Z-A), Year (High-Low, Low-High), Shares (High-Low, Low-High), Total Shares (High-Low, Low-High).
+            *   **Asset Display Area**: Scrollable area (`overflow-y-auto`). Displays assets (fetched based on current filters/sort) using either `AssetGrid.tsx` (rendering `AssetCard` components) or `AssetList.tsx` (rendering a `<table>` with `AssetListRow` components) based on the view toggle state.
+                *   The grid container (`AssetGrid.tsx`) uses `items-start` and `content-start` to prevent cards from stretching vertically.
+                *   The list view table (`AssetList.tsx`) includes a sticky header with sortable columns and a select-all checkbox.
+    *   Implements multi-select functionality via checkboxes on `AssetCard` or within `AssetListRow`. Selected count and batch actions ("Edit Metadata", "Delete Selected") appear in the main content toolbar.
     *   Triggers `BulkEditModal` when the "Edit Metadata" batch action is clicked.
     *   Filtering and sorting changes trigger an immediate re-fetch of assets via `useAssets.fetchAssets`.
+*   **Asset Grid Component**: `app/components/AssetGrid.tsx` (New)
+    *   Renders a responsive Tailwind CSS grid (`grid grid-cols-1 sm:grid-cols-2 ... 2xl:grid-cols-6`).
+    *   Maps the `assets` prop to `AssetCard` components.
+    *   Passes down `onSelect` and `onHistory` handlers to `AssetCard`.
+*   **Asset List Component**: `app/components/AssetList.tsx` (New)
+    *   Renders a `<table>` for the list view.
+    *   Includes a sticky `<thead>` with sortable column headers (Filename, Year, Shares, Total Shares) using icons and the `handleSort` prop.
+    *   Includes a select-all checkbox in the header linked to the `handleSelectAll` prop.
+    *   Maps the `assets` prop to `AssetListRow` components in the `<tbody>`.
+*   **Asset Card Component**: `app/components/AssetCard.tsx` (New)
+    *   Displays a single asset in the grid view, wrapped in `React.memo`.
+    *   Includes thumbnail, key metadata (`fileName`, `year`, `advertiser`, `niche`), conditional shares/accumulated shares, version count badge, history button, and selection checkbox.
+    *   Handles card click for selection and stops propagation for checkbox/button clicks.
+    *   Uses native HTML `title` attribute for hover details on badges/labels.
+*   **Asset List Row Component**: `app/components/AssetListRow.tsx` (New)
+    *   Renders a single `<tr>` for the list view table.
+    *   Includes cells for selection checkbox, thumbnail, metadata, conditional accumulated shares, and history button.
+    *   Passes selection changes via `onSelect` prop and history clicks via `onHistory` prop.
 *   **Bulk Edit Modal Component**: `app/components/BulkEditModal.tsx` (New)
     *   Modal dialog for batch editing metadata of selected assets (PRD §4.1 Library View).
     *   Displays fields for `year`, `advertiser`, `niche`, `shares`.
@@ -186,7 +202,8 @@ The project follows a structure separating the Electron main process, the React 
 *   **Database**: `better-sqlite3`, `vaultDatabase.db` in user data path. Schema includes migration for `adspower` -> `shares` rename.
 *   **Path Handling**: `path.win32.join` for DB paths, `path.join` otherwise.
 *   **UI Layout**: `App.tsx` root container uses `h-full w-full` and `<main>` element uses `flex flex-col flex-grow min-h-0 overflow-hidden` for proper nested scrolling. `LibraryView.tsx` uses `flex` for its two-pane layout, with the sidebar width controlled by state and the main content area managing its own scrolling. Tailwind CSS used throughout.
-    *   **AssetCard**: Displays thumbnail, key metadata, a version count badge (top-right), and a shares/accumulated shares label. The version badge shows the total count of assets in the group. The shares label is always "Shares:", but the value shown is conditional (accumulated vs. master shares) based on the version count, clarified by the native `title` attribute. Includes history button in footer.
+    *   `AssetCard.tsx`: Displays thumbnail, key metadata, a version count badge (top-right), and a shares/accumulated shares label. The version badge shows the total count of assets in the group. The shares label is always "Shares:", but the value shown is conditional (accumulated vs. master shares) based on the version count, clarified by the native `title` attribute. Includes history button in footer.
+    *   `AssetListRow.tsx`: Renders table cells (`<td>`) matching the columns defined in `AssetList.tsx`'s header.
 *   **Error Handling**: Basic error handling in IPC/hooks. `bulk-import-assets`/`bulkUpdateAssets` return errors. Thumbnail errors logged.
 *   **Dependencies**: `electron`, `react`, `better-sqlite3`, `@electron-toolkit/utils`, `mime-types`, `react-icons`, `ffmpeg-static`, `react-tooltip`, `react-modal` (required for VersionHistoryModal). External tools (`ffmpeg`, `pdftocairo`, `magick` CLI (ImageMagick), `Ghostscript`) needed for PDF and video thumbnails.
 *   **Type Definitions**: `app/index.d.ts` defines the `ElectronAPI` interface exposed via preload, including specific handlers and a generic `invoke` method.
