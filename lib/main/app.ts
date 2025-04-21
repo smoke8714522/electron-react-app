@@ -1,4 +1,4 @@
-import { BrowserWindow, shell, app } from 'electron'
+import { BrowserWindow, shell, app, Menu } from 'electron'
 import { join } from 'path'
 import { registerWindowIPC } from '@/lib/window/ipcEvents'
 import appIcon from '@/resources/build/icon.png?asset'
@@ -13,6 +13,7 @@ export function createAppWindow(): void {
     title: 'Ad-Vault',
     maximizable: true,
     resizable: true,
+    fullscreenable: true,
     minWidth: 800,
     minHeight: 600,
     webPreferences: {
@@ -20,6 +21,19 @@ export function createAppWindow(): void {
       sandbox: false,
     },
   })
+
+  // Setup native menu for fullscreen toggle
+  const menuTemplate = [
+    {
+      label: 'View',
+      submenu: [
+        { role: 'togglefullscreen' },
+        { role: 'minimize' },
+        { role: 'close' },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
 
   // Register IPC events for the main window.
   registerWindowIPC(mainWindow)

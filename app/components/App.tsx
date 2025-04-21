@@ -219,7 +219,7 @@ export default function App() {
   )
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-gray-900 text-white overflow-hidden min-h-0">
+    <div className="flex flex-col h-full w-full bg-gray-900 text-white min-h-0">
       <nav className="bg-gray-800 shadow-md flex-shrink-0">
         <div className="w-full px-4 py-2 flex items-center justify-between">
           <h1 className="text-lg font-bold">Ad Vault</h1>
@@ -240,7 +240,7 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="flex-grow">
+      <main className="flex flex-col flex-grow min-h-0 overflow-hidden">
         {activeView === 'dashboard' && <DashboardView />}
         {activeView === 'library' && 
           <LibraryView 

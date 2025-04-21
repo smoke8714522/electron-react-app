@@ -45,6 +45,7 @@ The project follows a structure separating the Electron main process, the React 
     *   Handles `BrowserWindow` creation.
     *   Configured to create a frameless, resizable window (`frame: false`, `titleBarStyle: 'hidden'`) to allow for a custom UI (PRD §5 Non-Functional Requirements).
     *   Window starts maximized (`mainWindow.maximize()`) to provide a full-window experience (PRD §5 Non-Functional Requirements).
+    *   Fullscreen support enabled (`fullscreenable: true`) and added native application menu with a 'View' menu containing a 'Toggle Fullscreen' item (`role: 'togglefullscreen'`).
 *   **Electron Main Entry**: `lib/main/main.ts`
     *   Handles app lifecycle events.
     *   Initializes the SQLite database (`vaultDatabase.db` in user data path).
@@ -127,7 +128,7 @@ The project follows a structure separating the Electron main process, the React 
     *   Top-level UI component using Tailwind CSS.
     *   Implements a simple top navigation bar ("Ad Vault" title + tabs) to switch between views ('Dashboard' and 'Library'). Navigation is edge-to-edge.
     *   Conditionally renders either the original basic asset list/edit view (as 'Dashboard') or the `LibraryView` based on selected tab state.
-    *   Root element uses Flexbox (`h-screen w-screen flex flex-col min-h-0`) to ensure the layout fills the entire window edge-to-edge without extra padding or child overflow (PRD §5 Non-Functional Requirements). Main content area handles scrolling.
+    *   Root element uses Flexbox (`h-full w-full`) to ensure the layout fills the entire window edge-to-edge without extra padding or child overflow (PRD §5 Non-Functional Requirements). Main content area handles scrolling.
 *   **Main Library View Component**: `app/components/LibraryView.tsx` (Refactored)
     *   Main view for browsing and managing assets, styled with Tailwind CSS.
     *   Features a two-pane layout implemented with Flexbox (PRD §4.1 Library View):
@@ -182,7 +183,7 @@ The project follows a structure separating the Electron main process, the React 
 *   **Previews/Thumbnails**: Handled by `ThumbnailService`. `get-assets` returns `thumbnailPath`.
 *   **Database**: `better-sqlite3`, `vaultDatabase.db` in user data path. Schema includes migration for `adspower` -> `shares` rename.
 *   **Path Handling**: `path.win32.join` for DB paths, `path.join` otherwise.
-*   **UI Layout**: `App.tsx` uses `flex flex-col h-screen w-screen` for full window layout. `LibraryView.tsx` uses `flex` for its two-pane layout, with the sidebar width controlled by state and the main content area managing its own scrolling. Tailwind CSS used throughout.
+*   **UI Layout**: `App.tsx` root container uses `h-full w-full` and `<main>` element uses `flex flex-col flex-grow min-h-0 overflow-hidden` for proper nested scrolling. `LibraryView.tsx` uses `flex` for its two-pane layout, with the sidebar width controlled by state and the main content area managing its own scrolling. Tailwind CSS used throughout.
     *   **AssetCard**: Displays thumbnail, key metadata, a version count badge (top-right), and a shares/accumulated shares label. The version badge shows the total count of assets in the group. The shares label is always "Shares:", but the value shown is conditional (accumulated vs. master shares) based on the version count, clarified by the native `title` attribute. Includes history button in footer.
 *   **Error Handling**: Basic error handling in IPC/hooks. `bulk-import-assets`/`bulkUpdateAssets` return errors. Thumbnail errors logged.
 *   **Dependencies**: `electron`, `react`, `better-sqlite3`, `@electron-toolkit/utils`, `mime-types`, `react-icons`, `ffmpeg-static`, `react-tooltip`, `react-modal` (required for VersionHistoryModal). External tools (`ffmpeg`, `pdftocairo`, `magick` CLI (ImageMagick), `Ghostscript`) needed for PDF and video thumbnails.
